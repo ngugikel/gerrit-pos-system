@@ -136,20 +136,6 @@ def record_sale():
     data = request.get_json()
     items = data.get('items', [])
     date = data.get('date', datetime.now().strftime('%Y-%m-%d'))
-    payments = data.get('payments', {})
-
-    # Payment validation
-    mpesa = float(payments.get('mpesa', 0) or 0)
-    cash = float(payments.get('cash', 0) or 0)
-    debt = float(payments.get('debt', 0) or 0)
-
-    # Calculate total sale amount
-    total_amount = sum(item['price'] * item['quantity'] for item in items)
-    total_paid = mpesa + cash + debt
-
-    # Allow small floating point tolerance
-    if abs(total_paid - total_amount) > 0.01:
-        return jsonify({'error': f'Payment total (KES {total_paid:.2f}) does not match sale total (KES {total_amount:.2f})'}), 400
 
     for item in items:
         product = item['name']
@@ -163,10 +149,7 @@ def record_sale():
                 'quantity': qty,
                 'unitPrice': item['price'],
                 'total': item['price'] * qty,
-                'type': 'Sale',
-                'mpesa': mpesa,
-                'cash': cash,
-                'debt': debt
+                'type': 'Sale'
             })
         else:
             return jsonify({'error': f'Insufficient stock for {product}'}), 400
@@ -208,30 +191,13 @@ def get_transactions():
 @token_required
 def get_stats():
     today = datetime.now().strftime('%Y-%m-%d')
-    today_sales = [s for s in sales_data if s['date'] == today]
-
-    # Payment breakdowns
-    total_mpesa = sum(s.get('mpesa', 0) for s in sales_data)
-    total_cash = sum(s.get('cash', 0) for s in sales_data)
-    total_debt = sum(s.get('debt', 0) for s in sales_data)
-
-    today_mpesa = sum(s.get('mpesa', 0) for s in today_sales)
-    today_cash = sum(s.get('cash', 0) for s in today_sales)
-    today_debt = sum(s.get('debt', 0) for s in today_sales)
+    today_sales = sum(s['total'] for s in sales_data if s['date'] == today)
 
     return jsonify({
         'totalSales': len(sales_data),
         'totalRevenue': sum(s['total'] for s in sales_data),
         'totalItems': sum(s['quantity'] for s in sales_data),
-        'todaySales': sum(s['total'] for s in today_sales),
-        'payments': {
-            'totalMpesa': total_mpesa,
-            'totalCash': total_cash,
-            'totalDebt': total_debt,
-            'todayMpesa': today_mpesa,
-            'todayCash': today_cash,
-            'todayDebt': today_debt
-        }
+        'todaySales': today_sales
     })
 
 # HTML Template with updated JavaScript for token auth
@@ -456,27 +422,6 @@ HTML_TEMPLATE = '''
                         <h3>Cart</h3>
                         <div id="cartItems"></div>
                         <div class="total">Total: KES <span id="cartTotal">0</span></div>
-                        <div style="margin-top: 20px; border-top: 2px solid #ddd; padding-top: 15px;">
-                            <h4>Payment Method</h4>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px;">
-                                <div>
-                                    <label style="font-size: 12px; color: #666;">M-Pesa (KES)</label>
-                                    <input type="number" id="payMpesa" placeholder="0" min="0" step="0.01" style="margin-top: 4px;">
-                                </div>
-                                <div>
-                                    <label style="font-size: 12px; color: #666;">Cash (KES)</label>
-                                    <input type="number" id="payCash" placeholder="0" min="0" step="0.01" style="margin-top: 4px;">
-                                </div>
-                                <div>
-                                    <label style="font-size: 12px; color: #666;">Debt (KES)</label>
-                                    <input type="number" id="payDebt" placeholder="0" min="0" step="0.01" style="margin-top: 4px;">
-                                </div>
-                            </div>
-                            <div style="margin-top: 10px; font-size: 14px; color: #666;">
-                                Payment Total: KES <span id="paymentTotal">0.00</span>
-                                <span id="paymentMatch" style="margin-left: 10px;"></span>
-                            </div>
-                        </div>
                         <button onclick="checkout()" class="btn-success" style="width: 100%; margin-top: 15px;">Complete Sale</button>
                     </div>
                 </div>
@@ -514,9 +459,6 @@ HTML_TEMPLATE = '''
                                 <th>Product</th>
                                 <th>Qty</th>
                                 <th>Total (KES)</th>
-                                <th>M-Pesa</th>
-                                <th>Cash</th>
-                                <th>Debt</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
@@ -815,9 +757,6 @@ HTML_TEMPLATE = '''
                         <td>${t.product}</td>
                         <td>${t.quantity}</td>
                         <td>KES ${t.total.toFixed(2)}</td>
-                        <td>${t.mpesa ? 'KES ' + t.mpesa.toFixed(2) : '-'}</td>
-                        <td>${t.cash ? 'KES ' + t.cash.toFixed(2) : '-'}</td>
-                        <td>${t.debt ? 'KES ' + t.debt.toFixed(2) : '-'}</td>
                     `;
                     tbody.appendChild(row);
                 });
@@ -834,7 +773,6 @@ HTML_TEMPLATE = '''
                 const stats = await response.json();
                 
                 const grid = document.getElementById('statsGrid');
-                const p = stats.payments || {};
                 grid.innerHTML = `
                     <div class="stat-card">
                         <div>Total Sales</div>
@@ -851,30 +789,6 @@ HTML_TEMPLATE = '''
                     <div class="stat-card">
                         <div>Today's Sales</div>
                         <div class="stat-value">KES ${stats.todaySales.toFixed(2)}</div>
-                    </div>
-                    <div class="stat-card" style="background: linear-gradient(135deg, #1e88e5 0%, #0d47a1 100%);">
-                        <div>Total M-Pesa</div>
-                        <div class="stat-value">KES ${(p.totalMpesa || 0).toFixed(2)}</div>
-                    </div>
-                    <div class="stat-card" style="background: linear-gradient(135deg, #43a047 0%, #1b5e20 100%);">
-                        <div>Total Cash</div>
-                        <div class="stat-value">KES ${(p.totalCash || 0).toFixed(2)}</div>
-                    </div>
-                    <div class="stat-card" style="background: linear-gradient(135deg, #e53935 0%, #b71c1c 100%);">
-                        <div>Total Debt</div>
-                        <div class="stat-value">KES ${(p.totalDebt || 0).toFixed(2)}</div>
-                    </div>
-                    <div class="stat-card" style="background: linear-gradient(135deg, #fb8c00 0%, #e65100 100%);">
-                        <div>Today's M-Pesa</div>
-                        <div class="stat-value">KES ${(p.todayMpesa || 0).toFixed(2)}</div>
-                    </div>
-                    <div class="stat-card" style="background: linear-gradient(135deg, #8e24aa 0%, #4a148c 100%);">
-                        <div>Today's Cash</div>
-                        <div class="stat-value">KES ${(p.todayCash || 0).toFixed(2)}</div>
-                    </div>
-                    <div class="stat-card" style="background: linear-gradient(135deg, #f4511e 0%, #bf360c 100%);">
-                        <div>Today's Debt</div>
-                        <div class="stat-value">KES ${(p.todayDebt || 0).toFixed(2)}</div>
                     </div>
                 `;
             } catch (error) {
