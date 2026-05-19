@@ -143,6 +143,9 @@ def record_sale():
     if abs(total_paid - total_amount) > 0.01:
         return jsonify({'error': f'Payment total (KES {total_paid:.2f}) does not match sale total (KES {total_amount:.2f})'}), 400
 
+    # Generate transaction ID for this sale
+    transaction_id = str(uuid.uuid4())[:8]
+
     for item in items:
         product = item['name']
         qty = item['quantity']
@@ -150,6 +153,7 @@ def record_sale():
             inventory_data[product]['stock'] -= qty
             sales_data.append({
                 'date': date,
+                'transactionId': transaction_id,
                 'product': product,
                 'quantity': qty,
                 'unitPrice': item['price'],
@@ -228,9 +232,9 @@ def sales_report():
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Sales Report"
-    ws.append(['Date', 'Product', 'Quantity', 'Unit Price', 'Total', 'M-Pesa', 'Cash', 'Debt'])
+    ws.append(['Date', 'Transaction ID', 'Product', 'Quantity', 'Unit Price', 'Total', 'M-Pesa', 'Cash', 'Debt'])
     for sale in sales_data:
-        ws.append([sale['date'], sale['product'], sale['quantity'], sale['unitPrice'], sale['total'], sale.get('mpesa', 0), sale.get('cash', 0), sale.get('debt', 0)])
+        ws.append([sale['date'], sale.get('transactionId', '-'), sale['product'], sale['quantity'], sale['unitPrice'], sale['total'], sale.get('mpesa', 0), sale.get('cash', 0), sale.get('debt', 0)])
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
@@ -260,9 +264,9 @@ def full_report():
     wb = openpyxl.Workbook()
     ws1 = wb.active
     ws1.title = "Sales"
-    ws1.append(['Date', 'Product', 'Quantity', 'Unit Price', 'Total', 'M-Pesa', 'Cash', 'Debt'])
+    ws1.append(['Date', 'Transaction ID', 'Product', 'Quantity', 'Unit Price', 'Total', 'M-Pesa', 'Cash', 'Debt'])
     for sale in sales_data:
-        ws1.append([sale['date'], sale['product'], sale['quantity'], sale['unitPrice'], sale['total'], sale.get('mpesa', 0), sale.get('cash', 0), sale.get('debt', 0)])
+        ws1.append([sale['date'], sale.get('transactionId', '-'), sale['product'], sale['quantity'], sale['unitPrice'], sale['total'], sale.get('mpesa', 0), sale.get('cash', 0), sale.get('debt', 0)])
     ws2 = wb.create_sheet("Restocks")
     ws2.append(['Date', 'Product', 'Quantity', 'Unit Price', 'Total'])
     for restock in restocks_data:
@@ -533,35 +537,40 @@ HTML_TEMPLATE = '''
                     <div class="search-box">
                         <input type="text" id="productSearch" placeholder="Search products..." onkeyup="filterProducts()">
                     </div>
-                    <div class="product-grid" id="productGrid"></div>
+                    <div class="pos-layout" style="display: flex; gap: 20px;">
+                        <div class="products-area" style="flex: 1;">
+                            <div class="product-grid" id="productGrid"></div>
+                        </div>
+                        <div class="cart-area" style="width: 320px; min-width: 320px;">
+                            <div class="cart-summary" style="position: sticky; top: 20px;">
+                                <h3>Cart</h3>
+                                <div id="cartItems"></div>
+                                <div class="total">Total: KES <span id="cartTotal">0</span></div>
 
-                    <div class="cart-summary">
-                        <h3>Cart</h3>
-                        <div id="cartItems"></div>
-                        <div class="total">Total: KES <span id="cartTotal">0</span></div>
-
-                        <div class="payment-section">
-                            <h4>Payment Method</h4>
-                            <div class="payment-grid">
-                                <div class="payment-input">
-                                    <label>M-Pesa (KES)</label>
-                                    <input type="number" id="payMpesa" placeholder="0" min="0" step="0.01" oninput="validatePayment()">
+                                <div class="payment-section">
+                                    <h4>Payment Method</h4>
+                                    <div class="payment-grid" style="grid-template-columns: 1fr;">
+                                        <div class="payment-input">
+                                            <label>M-Pesa (KES)</label>
+                                            <input type="number" id="payMpesa" placeholder="0" min="0" step="0.01" oninput="validatePayment()">
+                                        </div>
+                                        <div class="payment-input">
+                                            <label>Cash (KES)</label>
+                                            <input type="number" id="payCash" placeholder="0" min="0" step="0.01" oninput="validatePayment()">
+                                        </div>
+                                        <div class="payment-input">
+                                            <label>Debt (KES)</label>
+                                            <input type="number" id="payDebt" placeholder="0" min="0" step="0.01" oninput="validatePayment()">
+                                        </div>
+                                    </div>
+                                    <div class="payment-status">
+                                        Payment Total: KES <span id="paymentTotal">0.00</span>
+                                        <span id="paymentMatch" style="margin-left: 10px;"></span>
+                                    </div>
                                 </div>
-                                <div class="payment-input">
-                                    <label>Cash (KES)</label>
-                                    <input type="number" id="payCash" placeholder="0" min="0" step="0.01" oninput="validatePayment()">
-                                </div>
-                                <div class="payment-input">
-                                    <label>Debt (KES)</label>
-                                    <input type="number" id="payDebt" placeholder="0" min="0" step="0.01" oninput="validatePayment()">
-                                </div>
-                            </div>
-                            <div class="payment-status">
-                                Payment Total: KES <span id="paymentTotal">0.00</span>
-                                <span id="paymentMatch" style="margin-left: 10px;"></span>
+                                <button onclick="checkout()" class="btn-success" style="width: 100%; margin-top: 15px;">Complete Sale</button>
                             </div>
                         </div>
-                        <button onclick="checkout()" class="btn-success" style="width: 100%; margin-top: 15px;">Complete Sale</button>
                     </div>
                 </div>
 
@@ -971,17 +980,36 @@ HTML_TEMPLATE = '''
                 const tbody = document.querySelector('#transactionsTable tbody');
                 tbody.innerHTML = '';
 
+                // Group transactions by transactionId to show payments once per sale
+                const grouped = {};
                 transactions.forEach(t => {
+                    const key = t.transactionId || t.date + '-' + t.product;
+                    if (!grouped[key]) {
+                        grouped[key] = {
+                            date: t.date,
+                            type: t.type,
+                            items: [],
+                            total: 0,
+                            mpesa: t.mpesa || 0,
+                            cash: t.cash || 0,
+                            debt: t.debt || 0
+                        };
+                    }
+                    grouped[key].items.push(`${t.product} x${t.quantity}`);
+                    grouped[key].total += t.total;
+                });
+
+                Object.values(grouped).forEach(g => {
                     const row = document.createElement('tr');
                     row.innerHTML = `
-                        <td>${t.date}</td>
-                        <td>${t.type}</td>
-                        <td>${t.product}</td>
-                        <td>${t.quantity}</td>
-                        <td>KES ${t.total.toFixed(2)}</td>
-                        <td>${t.mpesa ? 'KES ' + t.mpesa.toFixed(2) : '-'}</td>
-                        <td>${t.cash ? 'KES ' + t.cash.toFixed(2) : '-'}</td>
-                        <td>${t.debt ? 'KES ' + t.debt.toFixed(2) : '-'}</td>
+                        <td>${g.date}</td>
+                        <td>${g.type}</td>
+                        <td>${g.items.join(', ')}</td>
+                        <td>-</td>
+                        <td>KES ${g.total.toFixed(2)}</td>
+                        <td>${g.mpesa ? 'KES ' + g.mpesa.toFixed(2) : '-'}</td>
+                        <td>${g.cash ? 'KES ' + g.cash.toFixed(2) : '-'}</td>
+                        <td>${g.debt ? 'KES ' + g.debt.toFixed(2) : '-'}</td>
                     `;
                     tbody.appendChild(row);
                 });
