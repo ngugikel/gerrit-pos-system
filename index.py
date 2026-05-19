@@ -101,7 +101,7 @@ def logout():
     token = request.headers.get('Authorization')
     if token and token.startswith('Bearer '):
         token = token[7:]
-        active_tokens.discard(token)
+        remove_token(token)
     return jsonify({'success': True})
 
 @app.route('/api/check-auth')
@@ -109,7 +109,7 @@ def check_auth():
     token = request.headers.get('Authorization')
     if token and token.startswith('Bearer '):
         token = token[7:]
-        if token in active_tokens:
+        if token in get_active_tokens():
             return jsonify({'authenticated': True})
     return jsonify({'authenticated': False})
 
