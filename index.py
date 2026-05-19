@@ -73,70 +73,88 @@ def get_or_create_sheet(sheet_name, worksheet_name):
 
 def sync_inventory_to_sheets():
     """Sync current inventory to Google Sheets"""
-    ws = get_or_create_sheet("Gerrit POS Data", "Inventory")
-    if not ws:
+    try:
+        ws = get_or_create_sheet("Gerrit POS Data", "Inventory")
+        if not ws:
+            print("ERROR: Could not get Inventory worksheet")
+            return False
+
+        # Clear existing data
+        ws.clear()
+
+        # Headers
+        headers = ['Product', 'Stock', 'Price', 'Value', 'Last Updated']
+        ws.append_row(headers)
+
+        # Data
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        for name, data in inventory_data.items():
+            value = data['stock'] * data['price']
+            ws.append_row([name, data['stock'], data['price'], value, now])
+
+        print(f"SUCCESS: Synced {len(inventory_data)} items to Inventory sheet")
+        return True
+    except Exception as e:
+        print(f"ERROR syncing inventory: {e}")
         return False
-
-    # Clear existing data
-    ws.clear()
-
-    # Headers
-    headers = ['Product', 'Stock', 'Price', 'Value', 'Last Updated']
-    ws.append_row(headers)
-
-    # Data
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    for name, data in inventory_data.items():
-        value = data['stock'] * data['price']
-        ws.append_row([name, data['stock'], data['price'], value, now])
-
-    return True
 
 def sync_sales_to_sheets():
     """Sync sales to Google Sheets"""
-    ws = get_or_create_sheet("Gerrit POS Data", "Sales")
-    if not ws:
+    try:
+        ws = get_or_create_sheet("Gerrit POS Data", "Sales")
+        if not ws:
+            print("ERROR: Could not get Sales worksheet")
+            return False
+
+        ws.clear()
+        headers = ['Date', 'Transaction ID', 'Product', 'Quantity', 'Unit Price', 'Total', 'M-Pesa', 'Cash', 'Debt']
+        ws.append_row(headers)
+
+        for sale in sales_data:
+            ws.append_row([
+                sale['date'],
+                sale.get('transactionId', '-'),
+                sale['product'],
+                sale['quantity'],
+                sale['unitPrice'],
+                sale['total'],
+                sale.get('mpesa', 0),
+                sale.get('cash', 0),
+                sale.get('debt', 0)
+            ])
+
+        print(f"SUCCESS: Synced {len(sales_data)} sales to Sales sheet")
+        return True
+    except Exception as e:
+        print(f"ERROR syncing sales: {e}")
         return False
-
-    ws.clear()
-    headers = ['Date', 'Transaction ID', 'Product', 'Quantity', 'Unit Price', 'Total', 'M-Pesa', 'Cash', 'Debt']
-    ws.append_row(headers)
-
-    for sale in sales_data:
-        ws.append_row([
-            sale['date'],
-            sale.get('transactionId', '-'),
-            sale['product'],
-            sale['quantity'],
-            sale['unitPrice'],
-            sale['total'],
-            sale.get('mpesa', 0),
-            sale.get('cash', 0),
-            sale.get('debt', 0)
-        ])
-
-    return True
 
 def sync_restocks_to_sheets():
     """Sync restocks to Google Sheets"""
-    ws = get_or_create_sheet("Gerrit POS Data", "Restocks")
-    if not ws:
+    try:
+        ws = get_or_create_sheet("Gerrit POS Data", "Restocks")
+        if not ws:
+            print("ERROR: Could not get Restocks worksheet")
+            return False
+
+        ws.clear()
+        headers = ['Date', 'Product', 'Quantity', 'Unit Price', 'Total']
+        ws.append_row(headers)
+
+        for restock in restocks_data:
+            ws.append_row([
+                restock['date'],
+                restock['product'],
+                restock['quantity'],
+                restock['unitPrice'],
+                restock['total']
+            ])
+
+        print(f"SUCCESS: Synced {len(restocks_data)} restocks to Restocks sheet")
+        return True
+    except Exception as e:
+        print(f"ERROR syncing restocks: {e}")
         return False
-
-    ws.clear()
-    headers = ['Date', 'Product', 'Quantity', 'Unit Price', 'Total']
-    ws.append_row(headers)
-
-    for restock in restocks_data:
-        ws.append_row([
-            restock['date'],
-            restock['product'],
-            restock['quantity'],
-            restock['unitPrice'],
-            restock['total']
-        ])
-
-    return True
 
 def load_inventory_from_sheets():
     """Load inventory from Google Sheets (if available)"""
@@ -270,10 +288,29 @@ def sync_to_google_sheets():
 def sync_status():
     """Check if Google Sheets is connected"""
     gc = get_google_client()
+    creds_set = os.environ.get('GOOGLE_CREDENTIALS') is not None
+
+    # Check if credentials are valid JSON
+    creds_valid = False
+    if creds_set:
+        try:
+            json.loads(os.environ.get('GOOGLE_CREDENTIALS'))
+            creds_valid = True
+        except:
+            pass
+
     return jsonify({
         'connected': gc is not None,
         'gspread_available': GSPREAD_AVAILABLE,
-        'credentials_set': os.environ.get('GOOGLE_CREDENTIALS') is not None
+        'credentials_set': creds_set,
+        'credentials_valid_json': creds_valid,
+        'tmp_writable': os.access('/tmp', os.W_OK),
+        'inventory_file_exists': os.path.exists(INVENTORY_FILE),
+        'sales_file_exists': os.path.exists(SALES_FILE),
+        'tokens_file_exists': os.path.exists(TOKENS_FILE),
+        'inventory_count': len(inventory_data),
+        'sales_count': len(sales_data),
+        'restocks_count': len(restocks_data)
     })
 
 @app.route('/api/login', methods=['POST'])
@@ -300,7 +337,8 @@ def check_auth():
     token = request.headers.get('Authorization')
     if token and token.startswith('Bearer '):
         token = token[7:]
-        if token in get_active_tokens():
+        tokens = get_active_tokens()
+        if token in tokens:
             return jsonify({'authenticated': True})
     return jsonify({'authenticated': False})
 
