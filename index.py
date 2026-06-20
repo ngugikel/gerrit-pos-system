@@ -315,7 +315,7 @@ def record_sale():
             append_to_sheet(
                 "Sales",
                 [
-                    datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                    sale_date,  # Use the backdated date from frontend
                     item['name'],
                     item['quantity'],
                     item['price'],
@@ -449,7 +449,7 @@ def get_stats():
     })
 
 
-# HTML Template with FIXED Restock tab structure
+# HTML Template with SALES BACKDATING
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -635,6 +635,32 @@ HTML_TEMPLATE = '''
         .products-panel { width: 100%; }
         .cart-panel { width: 380px; }
 
+        /* Sale date picker styles */
+        .sale-date-section {
+            background: #fff3e0;
+            border: 1px solid #ffe0b2;
+            border-radius: 8px;
+            padding: 12px 15px;
+            margin-bottom: 15px;
+        }
+        .sale-date-section label {
+            font-size: 13px;
+            color: #e65100;
+            font-weight: 600;
+            display: block;
+            margin-bottom: 6px;
+        }
+        .sale-date-section input {
+            margin: 0;
+            border-color: #ffcc80;
+        }
+        .sale-date-section small {
+            color: #f57c00;
+            font-size: 12px;
+            display: block;
+            margin-top: 4px;
+        }
+
         /* Restock form styles */
         .restock-form {
             max-width: 500px;
@@ -720,7 +746,15 @@ HTML_TEMPLATE = '''
                                 <h3>Cart</h3>
                                 <div id="cartItems"></div>
                                 <div class="total">Total: KES <span id="cartTotal">0.00</span></div>
-                                <div style="margin-top: 20px; border-top: 2px solid #ddd; padding-top: 15px;">
+
+                                <!-- SALE DATE PICKER -->
+                                <div class="sale-date-section">
+                                    <label for="saleDate">📅 Sale Date</label>
+                                    <input type="date" id="saleDate">
+                                    <small>Leave as today, or select a past date to backdate this sale</small>
+                                </div>
+
+                                <div style="border-top: 2px solid #ddd; padding-top: 15px;">
                                     <h4>Payment Method</h4>
                                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px;">
                                         <div>
@@ -1034,6 +1068,9 @@ HTML_TEMPLATE = '''
             const cash = parseFloat(document.getElementById('payCash').value) || 0;
             const debt = parseFloat(document.getElementById('payDebt').value) || 0;
 
+            // Get the sale date (for backdating)
+            const saleDate = document.getElementById('saleDate').value || new Date().toISOString().split('T')[0];
+
             const totalAmount = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
             const totalPaid = mpesa + cash + debt;
 
@@ -1051,7 +1088,8 @@ HTML_TEMPLATE = '''
                     },
                     body: JSON.stringify({ 
                         items,
-                        payments: { mpesa, cash, debt }
+                        payments: { mpesa, cash, debt },
+                        date: saleDate  // Send the backdated date
                     })
                 });
 
@@ -1094,7 +1132,6 @@ HTML_TEMPLATE = '''
             const select = document.getElementById('restockProduct');
             select.innerHTML = '';
 
-            // Add a default option
             const defaultOption = document.createElement('option');
             defaultOption.value = '';
             defaultOption.textContent = '-- Select a product --';
@@ -1107,7 +1144,6 @@ HTML_TEMPLATE = '''
                 select.appendChild(option);
             });
 
-            // Add change listener to show current stock
             select.addEventListener('change', updateRestockStockDisplay);
         }
 
@@ -1270,7 +1306,9 @@ HTML_TEMPLATE = '''
 
         document.addEventListener('DOMContentLoaded', () => {
             const today = new Date().toISOString().split('T')[0];
+            const saleDate = document.getElementById('saleDate');
             const restockDate = document.getElementById('restockDate');
+            if (saleDate) { saleDate.value = today; }
             if (restockDate) { restockDate.value = today; }
         });
     </script>
