@@ -749,10 +749,16 @@ HTML_TEMPLATE = '''
             updatePaymentDisplay();
         }
 
+
         function updateCartDisplay() {
             const container = document.getElementById('cartItems');
             container.innerHTML = '';
-            let total = 0;
+            if (Object.keys(cart).length === 0) {
+            document.getElementById('cartTotal').textContent = '0.00';
+            return;
+        }
+
+        let total = 0;
             
             Object.entries(cart).forEach(([product, qty]) => {
                 if (qty > 0) {
@@ -833,15 +839,33 @@ HTML_TEMPLATE = '''
                     })
                 });
                 
-                if (response.ok) {
-                    showMessage('message', 'Sale completed successfully!', 'success');
-                    cart = {};
-                    document.getElementById('payMpesa').value = '';
-                    document.getElementById('payCash').value = '';
-                    document.getElementById('payDebt').value = '';
-                    loadProducts();
-                    loadInventory();
-                    updatePaymentDisplay();
+            if (response.ok) {
+    showMessage('message', 'Sale completed successfully!', 'success');
+
+    // Clear cart object
+    cart = {};
+
+    // Force cart redraw
+    updateCartDisplay();
+
+    // Reset all visible quantity counters
+    document.querySelectorAll('[id^="qty-"]').forEach(el => {
+        el.textContent = '0';
+    });
+
+    // Clear payment fields
+    document.getElementById('payMpesa').value = '';
+    document.getElementById('payCash').value = '';
+    document.getElementById('payDebt').value = '';
+
+    updatePaymentDisplay();
+
+    // Reload inventory/products
+    await loadProducts();
+    await loadInventory();
+
+    console.log("Cart cleared");
+}
                 } else {
                     const data = await response.json();
                     showMessage('message', data.error || 'Sale failed', 'error');
