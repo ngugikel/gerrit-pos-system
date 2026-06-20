@@ -10,16 +10,11 @@ CORS(app)
 
 GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2bGY0Z-dbAd6acP1kslfMjznNgYwMv3Kydka9lm9_e2HvNjJj108tBaOR8WuEaVGR9w/exec'
 
-# File paths for local persistence (fallback only)
-INVENTORY_FILE = '/tmp/inventory.json'
-SALES_FILE = '/tmp/sales.json'
-RESTOCKS_FILE = '/tmp/restocks.json'
-
 # Admin credentials
 ADMIN_USERNAME = 'admin'
 ADMIN_PASSWORD = 'padmin123'
 
-# Global data stores
+# Global data stores - loaded from sheets on startup, kept in memory
 inventory_data = {}
 sales_data = []
 restocks_data = []
@@ -31,16 +26,6 @@ def safe_float(value, default=0):
         return default
     try:
         return float(value)
-    except (ValueError, TypeError):
-        return default
-
-
-def safe_int(value, default=0):
-    """Safely convert a value to int, handling empty strings and None"""
-    if value is None or value == "" or value == " ":
-        return default
-    try:
-        return int(float(value))
     except (ValueError, TypeError):
         return default
 
@@ -57,7 +42,6 @@ def read_sheet(sheet_name):
 
         data = response.json()
 
-        # Handle case where Apps Script returns a JSON string of a 2D array
         if isinstance(data, str):
             data = json.loads(data)
 
@@ -102,49 +86,18 @@ def append_to_sheet(sheet_name, row):
         return False
 
 
-def sync_inventory_to_sheet():
-    """Push current inventory to Google Sheet (batch update)"""
-    try:
-        rows = [["Product", "OpeningStock", "UnitPrice", "StockDate"]]
-        today = datetime.now().strftime('%Y-%m-%d')
-        for name, data in inventory_data.items():
-            # Pad with empty strings to match the 10-column structure
-            rows.append([name, data["stock"], data["price"], today, "", "", "", "", "", ""])
-
-        response = requests.post(
-            GOOGLE_SCRIPT_URL,
-            json={
-                "action": "batchUpdate",
-                "sheet": "Inventory",
-                "rows": rows
-            },
-            timeout=30
-        )
-
-        print("========== INVENTORY SYNC ==========")
-        print("Status:", response.status_code)
-        print("Response:", response.text)
-        print("====================================")
-
-        return response.status_code == 200
-    except Exception as e:
-        print("Inventory sync error:", e)
-        return False
-
-
 def load_inventory_from_sheet():
-    """Load inventory from Google Sheet 'Inventory' tab"""
+    """Load inventory from Google Sheet 'Inventory' tab - READ ONLY"""
     global inventory_data
 
     data = read_sheet("Inventory")
-    if not data or len(data) < 2:  # Need at least header + 1 data row
+    if not data or len(data) < 2:
         print("No inventory data found in sheet or sheet is empty")
         return False
 
     inventory_data = {}
 
-    # Skip header row (row 0)
-    for row in data[1:]:
+    for row in data[1:]:  # Skip header
         if len(row) >= 3 and row[0]:
             product_name = str(row[0]).strip()
             stock = safe_float(row[1])
@@ -156,9 +109,6 @@ def load_inventory_from_sheet():
             }
 
     print(f"Loaded {len(inventory_data)} products from Google Sheet 'Inventory'")
-
-    # Save to local file as backup
-    save_inventory()
     return True
 
 
@@ -191,7 +141,6 @@ def load_sales_from_sheet():
                 continue
 
     print(f"Loaded {len(sales_data)} sales records from Google Sheet")
-    save_sales()
 
 
 def load_restocks_from_sheet():
@@ -207,8 +156,6 @@ def load_restocks_from_sheet():
     for row in data[1:]:
         if len(row) >= 5:
             try:
-                # Your sheet: Date, Product, Qty, UnitPrice, [empty], TotalCost
-                # So total is at index 5, not index 4
                 total_idx = 5 if len(row) > 5 and row[5] not in [None, ""] else 4
                 restocks_data.append({
                     'date': str(row[0]) if row[0] else "",
@@ -223,55 +170,20 @@ def load_restocks_from_sheet():
                 continue
 
     print(f"Loaded {len(restocks_data)} restock records from Google Sheet")
-    save_restocks()
 
 
 def load_data():
-    """Load ALL data from Google Sheets (source of truth)"""
-    # Try to load from Google Sheets first
-    sheet_loaded = load_inventory_from_sheet()
-
-    if not sheet_loaded:
-        # Fallback to local file if sheet fails
-        if os.path.exists(INVENTORY_FILE):
-            with open(INVENTORY_FILE, 'r') as f:
-                global inventory_data
-                inventory_data = json.load(f)
-            print("Loaded inventory from local fallback file")
-        else:
-            print("WARNING: No inventory data available!")
-            inventory_data = {}
-
-    # Load sales and restocks from sheets too
+    """Load ALL data from Google Sheets on startup"""
+    load_inventory_from_sheet()
     load_sales_from_sheet()
     load_restocks_from_sheet()
 
 
-def save_inventory():
-    """Save inventory to /tmp (local backup only)"""
-    with open(INVENTORY_FILE, 'w') as f:
-        json.dump(inventory_data, f)
-
-
-def save_sales():
-    """Save sales to /tmp (local backup only)"""
-    with open(SALES_FILE, 'w') as f:
-        json.dump(sales_data, f)
-
-
-def save_restocks():
-    """Save restocks to /tmp (local backup only)"""
-    with open(RESTOCKS_FILE, 'w') as f:
-        json.dump(restocks_data, f)
-
-
 def token_required(f):
     from functools import wraps
-
     @wraps(f)
     def decorated(*args, **kwargs):
         return f(*args, **kwargs)
-
     return decorated
 
 
@@ -295,19 +207,13 @@ def test_sheet():
                 0
             ]
         }
-
         response = requests.post(
             GOOGLE_SCRIPT_URL,
             headers={"Content-Type": "application/json"},
             data=json.dumps(payload),
             timeout=30
         )
-
-        return jsonify({
-            "status_code": response.status_code,
-            "response": response.text
-        })
-
+        return jsonify({"status_code": response.status_code, "response": response.text})
     except Exception as e:
         return jsonify({"error": str(e)})
 
@@ -317,7 +223,6 @@ def debug_sheet():
     sales = read_sheet("Sales")
     inventory = read_sheet("Inventory")
     restocks = read_sheet("Restocks")
-
     return jsonify({
         "inventory_rows": len(inventory),
         "inventory_sample": inventory[:3] if inventory else [],
@@ -325,6 +230,9 @@ def debug_sheet():
         "sales_sample": sales[:3] if sales else [],
         "restocks_rows": len(restocks),
         "restocks_sample": restocks[:3] if restocks else [],
+        "memory_inventory_count": len(inventory_data),
+        "memory_sales_count": len(sales_data),
+        "memory_restocks_count": len(restocks_data),
     })
 
 
@@ -336,21 +244,9 @@ def index():
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
-
-    if (
-        data.get('username') == ADMIN_USERNAME and
-        data.get('password') == ADMIN_PASSWORD
-    ):
-        return jsonify({
-            'success': True,
-            'token': 'gerrit-admin',
-            'message': 'Login successful'
-        })
-
-    return jsonify({
-        'success': False,
-        'message': 'Invalid credentials'
-    }), 401
+    if data.get('username') == ADMIN_USERNAME and data.get('password') == ADMIN_PASSWORD:
+        return jsonify({'success': True, 'token': 'gerrit-admin', 'message': 'Login successful'})
+    return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
 
 
 @app.route('/api/logout', methods=['POST'])
@@ -365,21 +261,16 @@ def check_auth():
 
 @app.route('/api/products')
 def get_products():
-    """Public endpoint to get products (no auth required)"""
+    """Public endpoint to get products"""
     products = []
     for name, data in inventory_data.items():
-        products.append({
-            'name': name,
-            'price': data['price'],
-            'stock': data['stock']
-        })
+        products.append({'name': name, 'price': data['price'], 'stock': data['stock']})
     return jsonify(products)
 
 
 @app.route('/api/inventory')
 @token_required
 def get_inventory():
-    # Reload from sheet to get latest data
     load_inventory_from_sheet()
     return jsonify(inventory_data)
 
@@ -392,20 +283,16 @@ def record_sale():
     sale_date = data.get('date', datetime.now().strftime('%Y-%m-%d'))
     payments = data.get('payments', {})
 
-    # Payment validation
     mpesa = float(payments.get('mpesa', 0) or 0)
     cash = float(payments.get('cash', 0) or 0)
     debt = float(payments.get('debt', 0) or 0)
 
-    # Calculate total sale amount
     total_amount = sum(item['price'] * item['quantity'] for item in items)
     total_paid = mpesa + cash + debt
 
-    # Allow small floating point tolerance
     if abs(total_paid - total_amount) > 0.01:
         return jsonify({'error': f'Payment total (KES {total_paid:.2f}) does not match sale total (KES {total_amount:.2f})'}), 400
 
-    # Process each item
     for item in items:
         product = item['name']
         qty = item['quantity']
@@ -413,7 +300,6 @@ def record_sale():
         if product in inventory_data and inventory_data[product]['stock'] >= qty:
             inventory_data[product]['stock'] -= qty
 
-            # Add to local sales log
             sales_data.append({
                 'date': sale_date,
                 'product': product,
@@ -426,27 +312,21 @@ def record_sale():
                 'debt': debt
             })
 
-            # Write to Google Sheet - match your column structure
             append_to_sheet(
                 "Sales",
                 [
-                    datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),  # ISO format like your existing data
+                    datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
                     item['name'],
                     item['quantity'],
                     item['price'],
                     item['price'] * item['quantity'],
-                    mpesa if mpesa > 0 else "",  # Empty string if 0 to match your sheet
+                    mpesa if mpesa > 0 else "",
                     cash if cash > 0 else "",
                     debt if debt > 0 else ""
                 ]
             )
         else:
             return jsonify({'error': f'Insufficient stock for {product}'}), 400
-
-    # Sync updated inventory back to Google Sheet
-    sync_inventory_to_sheet()
-    save_inventory()
-    save_sales()
 
     return jsonify({'success': True})
 
@@ -468,7 +348,6 @@ def record_restock():
     if product in inventory_data:
         inventory_data[product]['stock'] += qty
 
-        # Add to local restocks log
         restocks_data.append({
             'date': date,
             'product': product,
@@ -478,7 +357,6 @@ def record_restock():
             'type': 'Restock'
         })
 
-        # Write to Google Sheet - match your column structure: Date, Product, Qty, UnitPrice, [empty], TotalCost
         append_to_sheet(
             "Restocks",
             [
@@ -486,15 +364,10 @@ def record_restock():
                 product,
                 qty,
                 inventory_data[product]['price'],
-                "",  # Empty column 5
-                inventory_data[product]['price'] * qty  # TotalCost at column 6
+                "",
+                inventory_data[product]['price'] * qty
             ]
         )
-
-        # Sync updated inventory back to Google Sheet
-        sync_inventory_to_sheet()
-        save_inventory()
-        save_restocks()
 
         return jsonify({'success': True})
 
@@ -504,13 +377,11 @@ def record_restock():
 @app.route('/api/transactions')
 @token_required
 def get_transactions():
-    # Reload from sheets to get latest data
     load_sales_from_sheet()
     load_restocks_from_sheet()
 
     transactions = []
 
-    # Add sales
     for sale in sales_data:
         transactions.append({
             "date": sale['date'],
@@ -524,7 +395,6 @@ def get_transactions():
             "type": "Sale"
         })
 
-    # Add restocks
     for restock in restocks_data:
         transactions.append({
             "date": restock['date'],
@@ -539,14 +409,12 @@ def get_transactions():
         })
 
     transactions.sort(key=lambda x: x["date"], reverse=True)
-
     return jsonify(transactions)
 
 
 @app.route('/api/stats')
 @token_required
 def get_stats():
-    # Reload from sheet to get latest data
     load_sales_from_sheet()
 
     total_sales = len(sales_data)
@@ -557,7 +425,6 @@ def get_stats():
     total_cash = sum(s['cash'] for s in sales_data)
     total_debt = sum(s['debt'] for s in sales_data)
 
-    # Calculate today's stats
     today = datetime.now().strftime('%Y-%m-%d')
     today_sales_data = [s for s in sales_data if today in str(s['date'])]
 
@@ -582,7 +449,7 @@ def get_stats():
     })
 
 
-# HTML Template with updated JavaScript for token auth
+# HTML Template with FIXED Restock tab structure
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -623,6 +490,7 @@ HTML_TEMPLATE = '''
         .nav {
             display: flex;
             gap: 10px;
+            flex-wrap: wrap;
         }
         .nav button {
             background: #555;
@@ -709,15 +577,6 @@ HTML_TEMPLATE = '''
         }
         .message.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .message.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
-        .tab {
-            padding: 10px 20px;
-            background: #e0e0e0;
-            border: none;
-            cursor: pointer;
-            border-radius: 5px;
-        }
-        .tab.active { background: #667eea; color: white; }
         .search-box { margin-bottom: 20px; }
         .product-grid {
             display: grid;
@@ -767,30 +626,56 @@ HTML_TEMPLATE = '''
         .payment-match { color: #27ae60; font-weight: bold; }
         .payment-mismatch { color: #e74c3c; font-weight: bold; }
         .out-of-stock { opacity: 0.5; pointer-events: none; }
-    .pos-layout{
-    display:grid;
-    grid-template-columns: 2fr 380px;
-    gap:20px;
-    align-items:start;
-}
+        .pos-layout {
+            display: grid;
+            grid-template-columns: 2fr 380px;
+            gap: 20px;
+            align-items: start;
+        }
+        .products-panel { width: 100%; }
+        .cart-panel { width: 380px; }
 
-.products-panel{
-    width:100%;
-}
+        /* Restock form styles */
+        .restock-form {
+            max-width: 500px;
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 10px;
+        }
+        .restock-form label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+        .restock-form .form-group {
+            margin-bottom: 20px;
+        }
+        .restock-form select, .restock-form input {
+            margin: 0;
+        }
+        .restock-info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2196f3;
+        }
+        .restock-info h4 {
+            margin-bottom: 8px;
+            color: #1565c0;
+        }
+        .restock-info p {
+            color: #555;
+            font-size: 14px;
+            line-height: 1.5;
+        }
 
-.cart-panel{
-    width:380px;
-}
-
-@media(max-width:900px){
-    .pos-layout{
-        grid-template-columns:1fr;
-    }
-
-    .cart-panel{
-        width:100%;
-    }
-}
+        @media(max-width:900px) {
+            .pos-layout { grid-template-columns: 1fr; }
+            .cart-panel { width: 100%; }
+            .nav { justify-content: center; }
+        }
     </style>
 </head>
 <body>
@@ -821,48 +706,49 @@ HTML_TEMPLATE = '''
             <div class="content">
                 <div id="message" class="message"></div>
 
-                <!-- POS Tab -->
+                <!-- ==================== POS TAB ==================== -->
                 <div id="posTab" class="tab-content">
                     <div class="pos-layout">
                         <div class="products-panel">
                             <div class="search-box">
-                        <input type="text" id="productSearch" placeholder="Search products..." onkeyup="filterProducts()">
-                    </div>
-                    <div class="product-grid" id="productGrid"></div>
-
-                    </div>
-                        <div class="cart-panel">
-                        <div class="cart-summary">
-                        <h3>Cart</h3>
-                        <div id="cartItems"></div>
-                        <div class="total">Total: KES <span id="cartTotal">0.00</span></div>
-                        <div style="margin-top: 20px; border-top: 2px solid #ddd; padding-top: 15px;">
-                            <h4>Payment Method</h4>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px;">
-                                <div>
-                                    <label style="font-size: 12px; color: #666;">M-Pesa (KES)</label>
-                                    <input type="number" id="payMpesa" placeholder="0" min="0" step="0.01" style="margin-top: 4px;" oninput="updatePaymentDisplay()">
-                                </div>
-                                <div>
-                                    <label style="font-size: 12px; color: #666;">Cash (KES)</label>
-                                    <input type="number" id="payCash" placeholder="0" min="0" step="0.01" style="margin-top: 4px;" oninput="updatePaymentDisplay()">
-                                </div>
-                                <div>
-                                    <label style="font-size: 12px; color: #666;">Debt (KES)</label>
-                                    <input type="number" id="payDebt" placeholder="0" min="0" step="0.01" style="margin-top: 4px;" oninput="updatePaymentDisplay()">
-                                </div>
+                                <input type="text" id="productSearch" placeholder="Search products..." onkeyup="filterProducts()">
                             </div>
-                            <div style="margin-top: 10px; font-size: 14px; color: #666;">
-                                Payment Total: KES <span id="paymentTotal">0.00</span>
-                                <span id="paymentMatch" style="margin-left: 10px;"></span>
+                            <div class="product-grid" id="productGrid"></div>
+                        </div>
+                        <div class="cart-panel">
+                            <div class="cart-summary">
+                                <h3>Cart</h3>
+                                <div id="cartItems"></div>
+                                <div class="total">Total: KES <span id="cartTotal">0.00</span></div>
+                                <div style="margin-top: 20px; border-top: 2px solid #ddd; padding-top: 15px;">
+                                    <h4>Payment Method</h4>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px;">
+                                        <div>
+                                            <label style="font-size: 12px; color: #666;">M-Pesa (KES)</label>
+                                            <input type="number" id="payMpesa" placeholder="0" min="0" step="0.01" style="margin-top: 4px;" oninput="updatePaymentDisplay()">
+                                        </div>
+                                        <div>
+                                            <label style="font-size: 12px; color: #666;">Cash (KES)</label>
+                                            <input type="number" id="payCash" placeholder="0" min="0" step="0.01" style="margin-top: 4px;" oninput="updatePaymentDisplay()">
+                                        </div>
+                                        <div>
+                                            <label style="font-size: 12px; color: #666;">Debt (KES)</label>
+                                            <input type="number" id="payDebt" placeholder="0" min="0" step="0.01" style="margin-top: 4px;" oninput="updatePaymentDisplay()">
+                                        </div>
+                                    </div>
+                                    <div style="margin-top: 10px; font-size: 14px; color: #666;">
+                                        Payment Total: KES <span id="paymentTotal">0.00</span>
+                                        <span id="paymentMatch" style="margin-left: 10px;"></span>
+                                    </div>
+                                </div>
+                                <button onclick="checkout()" class="btn-success" style="width: 100%; margin-top: 15px;">Complete Sale</button>
                             </div>
                         </div>
-                        <button onclick="checkout()" class="btn-success" style="width: 100%; margin-top: 15px;">Complete Sale</button>
                     </div>
                 </div>
-                </div>
+                <!-- ==================== END POS TAB ==================== -->
 
-                <!-- Inventory Tab -->
+                <!-- ==================== INVENTORY TAB ==================== -->
                 <div id="inventoryTab" class="tab-content hidden">
                     <h2>Inventory Management</h2>
                     <table id="inventoryTable">
@@ -877,40 +763,49 @@ HTML_TEMPLATE = '''
                         <tbody></tbody>
                     </table>
                 </div>
+                <!-- ==================== END INVENTORY TAB ==================== -->
 
-               <!-- Restock Tab -->
+                <!-- ==================== RESTOCK TAB ==================== -->
                 <div id="restockTab" class="tab-content hidden">
+                    <h2>Restock Inventory</h2>
 
-            <h2>Restock Inventory</h2>
+                    <div class="restock-info">
+                        <h4>ℹ️ How Restocking Works</h4>
+                        <p>Select a product, enter the quantity received, and choose the date. The stock will be added to your current inventory and recorded in the Restocks log.</p>
+                    </div>
 
-            <div style="margin-bottom:15px;">
-                <label>Date</label>
-                <input type="date" id="restockDate">
-            </div>
+                    <div class="restock-form">
+                        <div class="form-group">
+                            <label for="restockDate">Restock Date</label>
+                            <input type="date" id="restockDate">
+                            <small style="color: #666; display: block; margin-top: 4px;">You can backdate restocks by selecting a past date</small>
+                        </div>
 
-            <div style="margin-bottom:15px;">
-                <label>Product</label>
-                <select id="restockProduct"></select>
-            </div>
+                        <div class="form-group">
+                            <label for="restockProduct">Product</label>
+                            <select id="restockProduct"></select>
+                        </div>
 
-            <div style="margin-bottom:15px;">
-                <label>Quantity</label>
-                <input
-                    type="number"
-                    id="restockQty"
-                    min="1"
-                    placeholder="Quantity">
-            </div>
+                        <div class="form-group">
+                            <label for="restockQty">Quantity to Add</label>
+                            <input type="number" id="restockQty" min="1" placeholder="Enter quantity received">
+                        </div>
 
-            <button onclick="restock()" class="btn-success">
-                Add Stock
-            </button>
+                        <div class="form-group">
+                            <label>Current Stock</label>
+                            <div id="currentStockDisplay" style="padding: 12px; background: white; border-radius: 5px; border: 1px solid #ddd; color: #667eea; font-weight: bold;">
+                                Select a product to see current stock
+                            </div>
+                        </div>
 
-        </div>
+                        <button onclick="restock()" class="btn-success" style="width: 100%;">
+                            ➕ Add Stock
+                        </button>
+                    </div>
+                </div>
+                <!-- ==================== END RESTOCK TAB ==================== -->
 
-        </div>
-
-                <!-- Transactions Tab -->
+                <!-- ==================== TRANSACTIONS TAB ==================== -->
                 <div id="transactionsTab" class="tab-content hidden">
                     <h2>Transaction History</h2>
                     <table id="transactionsTable">
@@ -929,12 +824,15 @@ HTML_TEMPLATE = '''
                         <tbody></tbody>
                     </table>
                 </div>
+                <!-- ==================== END TRANSACTIONS TAB ==================== -->
 
-                <!-- Stats Tab -->
+                <!-- ==================== STATS TAB ==================== -->
                 <div id="statsTab" class="tab-content hidden">
                     <h2>Sales Statistics</h2>
                     <div class="stats-grid" id="statsGrid"></div>
                 </div>
+                <!-- ==================== END STATS TAB ==================== -->
+
             </div>
         </div>
     </div>
@@ -945,10 +843,7 @@ HTML_TEMPLATE = '''
         let cart = {};
         let products = [];
 
-        // Check auth on load
-        if (authToken) {
-            checkAuth();
-        }
+        if (authToken) { checkAuth(); }
 
         async function checkAuth() {
             try {
@@ -956,16 +851,9 @@ HTML_TEMPLATE = '''
                     headers: { 'Authorization': 'Bearer ' + authToken }
                 });
                 const data = await response.json();
-                if (data.authenticated) {
-                    showApp();
-                } else {
-                    localStorage.removeItem('pos_token');
-                    authToken = null;
-                    showLogin();
-                }
-            } catch (error) {
-                showLogin();
-            }
+                if (data.authenticated) { showApp(); }
+                else { localStorage.removeItem('pos_token'); authToken = null; showLogin(); }
+            } catch (error) { showLogin(); }
         }
 
         function showLogin() {
@@ -983,14 +871,12 @@ HTML_TEMPLATE = '''
         async function login() {
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
-
             try {
                 const response = await fetch('/api/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
                 });
-
                 const data = await response.json();
                 if (data.success) {
                     authToken = data.token;
@@ -1006,10 +892,7 @@ HTML_TEMPLATE = '''
         }
 
         function logout() {
-            fetch('/api/logout', {
-                method: 'POST',
-                headers: { 'Authorization': 'Bearer ' + authToken }
-            });
+            fetch('/api/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + authToken } });
             localStorage.removeItem('pos_token');
             authToken = null;
             showLogin();
@@ -1021,9 +904,7 @@ HTML_TEMPLATE = '''
                 products = await response.json();
                 renderProductGrid();
                 populateRestockSelect();
-            } catch (error) {
-                console.error('Failed to load products');
-            }
+            } catch (error) { console.error('Failed to load products'); }
         }
 
         async function loadInventory() {
@@ -1033,15 +914,12 @@ HTML_TEMPLATE = '''
                 });
                 inventory = await response.json();
                 renderInventoryTable();
-            } catch (error) {
-                console.error('Failed to load inventory');
-            }
+            } catch (error) { console.error('Failed to load inventory'); }
         }
 
         function renderProductGrid() {
             const grid = document.getElementById('productGrid');
             grid.innerHTML = '';
-
             products.forEach(product => {
                 const card = document.createElement('div');
                 card.className = 'product-card' + (product.stock <= 0 ? ' out-of-stock' : '');
@@ -1089,17 +967,15 @@ HTML_TEMPLATE = '''
             updatePaymentDisplay();
         }
 
-
         function updateCartDisplay() {
             const container = document.getElementById('cartItems');
             container.innerHTML = '';
             if (Object.keys(cart).length === 0) {
-            document.getElementById('cartTotal').textContent = '0.00';
-            return;
-        }
+                document.getElementById('cartTotal').textContent = '0.00';
+                return;
+            }
 
-        let total = 0;
-
+            let total = 0;
             Object.entries(cart).forEach(([product, qty]) => {
                 if (qty > 0) {
                     const productData = products.find(p => p.name === product);
@@ -1179,32 +1055,17 @@ HTML_TEMPLATE = '''
                     })
                 });
 
-            if (response.ok) {
-    showMessage('message', 'Sale completed successfully!', 'success');
-
-    // Clear cart object
-    cart = {};
-
-    // Force cart redraw
-    updateCartDisplay();
-
-    // Reset all visible quantity counters
-    document.querySelectorAll('[id^="qty-"]').forEach(el => {
-        el.textContent = '0';
-    });
-
-    // Clear payment fields
-    document.getElementById('payMpesa').value = '';
-    document.getElementById('payCash').value = '';
-    document.getElementById('payDebt').value = '';
-
-    updatePaymentDisplay();
-
-    // Reload inventory/products
-    await loadProducts();
-    await loadInventory();
-
-    console.log("Cart cleared");
+                if (response.ok) {
+                    showMessage('message', 'Sale completed successfully!', 'success');
+                    cart = {};
+                    updateCartDisplay();
+                    document.querySelectorAll('[id^="qty-"]').forEach(el => { el.textContent = '0'; });
+                    document.getElementById('payMpesa').value = '';
+                    document.getElementById('payCash').value = '';
+                    document.getElementById('payDebt').value = '';
+                    updatePaymentDisplay();
+                    await loadProducts();
+                    await loadInventory();
                 } else {
                     const data = await response.json();
                     showMessage('message', data.error || 'Sale failed', 'error');
@@ -1217,7 +1078,6 @@ HTML_TEMPLATE = '''
         function renderInventoryTable() {
             const tbody = document.querySelector('#inventoryTable tbody');
             tbody.innerHTML = '';
-
             Object.entries(inventory).forEach(([name, data]) => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
@@ -1233,116 +1093,109 @@ HTML_TEMPLATE = '''
         function populateRestockSelect() {
             const select = document.getElementById('restockProduct');
             select.innerHTML = '';
+
+            // Add a default option
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = '-- Select a product --';
+            select.appendChild(defaultOption);
+
             products.forEach(product => {
                 const option = document.createElement('option');
                 option.value = product.name;
-                option.textContent = product.name;
+                option.textContent = `${product.name} (Current: ${product.stock})`;
                 select.appendChild(option);
             });
+
+            // Add change listener to show current stock
+            select.addEventListener('change', updateRestockStockDisplay);
+        }
+
+        function updateRestockStockDisplay() {
+            const select = document.getElementById('restockProduct');
+            const display = document.getElementById('currentStockDisplay');
+            const selectedProduct = select.value;
+
+            if (!selectedProduct) {
+                display.textContent = 'Select a product to see current stock';
+                display.style.color = '#667eea';
+                return;
+            }
+
+            const product = products.find(p => p.name === selectedProduct);
+            if (product) {
+                display.innerHTML = `
+                    <span style="font-size: 24px;">${product.stock}</span> units in stock<br>
+                    <small>Unit Price: KES ${product.price.toFixed(2)}</small>
+                `;
+                display.style.color = product.stock < 5 ? '#e74c3c' : '#27ae60';
+            }
         }
 
         async function restock() {
+            const product = document.getElementById('restockProduct').value;
+            const quantity = parseInt(document.getElementById('restockQty').value);
+            const date = document.getElementById('restockDate').value;
 
-    const product =
-        document.getElementById('restockProduct').value;
+            if (!product) {
+                showMessage('message', 'Please select a product', 'error');
+                return;
+            }
 
-    const quantity =
-        parseInt(document.getElementById('restockQty').value);
+            if (!quantity || quantity < 1) {
+                showMessage('message', 'Please enter a valid quantity (minimum 1)', 'error');
+                return;
+            }
 
-    const date =
-        document.getElementById('restockDate').value;
+            try {
+                const response = await fetch('/api/restock', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + authToken
+                    },
+                    body: JSON.stringify({ product, quantity, date })
+                });
 
-    if (!quantity || quantity < 1) {
-
-        showMessage(
-            'message',
-            'Invalid quantity',
-            'error'
-        );
-
-        return;
-    }
-
-    try {
-
-        const response = await fetch('/api/restock', {
-
-            method: 'POST',
-
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + authToken
-            },
-
-            body: JSON.stringify({
-                product,
-                quantity,
-                date
-            })
-        });
-
-        if (response.ok) {
-
-            showMessage(
-                'message',
-                'Restocked successfully!',
-                'success'
-            );
-
-            document.getElementById('restockQty').value = '';
-
-            await loadInventory();
-            await loadProducts();
-
-        } else {
-
-            const data = await response.json();
-
-            showMessage(
-                'message',
-                data.error || 'Restock failed',
-                'error'
-            );
+                if (response.ok) {
+                    showMessage('message', `Successfully added ${quantity} units to ${product}!`, 'success');
+                    document.getElementById('restockQty').value = '';
+                    document.getElementById('restockProduct').value = '';
+                    updateRestockStockDisplay();
+                    await loadInventory();
+                    await loadProducts();
+                } else {
+                    const data = await response.json();
+                    showMessage('message', data.error || 'Restock failed', 'error');
+                }
+            } catch (error) {
+                showMessage('message', 'Restock failed: ' + error.message, 'error');
+            }
         }
 
-    } catch (error) {
+        async function loadTransactions() {
+            const response = await fetch('/api/transactions', {
+                headers: { 'Authorization': 'Bearer ' + authToken }
+            });
+            const transactions = await response.json();
+            const tbody = document.querySelector('#transactionsTable tbody');
+            tbody.innerHTML = '';
+            transactions.forEach(t => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${t.date}</td>
+                    <td>${t.type}</td>
+                    <td>${t.product}</td>
+                    <td>${t.quantity}</td>
+                    <td>${t.total}</td>
+                    <td>${t.mpesa}</td>
+                    <td>${t.cash}</td>
+                    <td>${t.debt}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
 
-        showMessage(
-            'message',
-            'Restock failed: ' + error.message,
-            'error'
-        );
-    }
-}
-
-       async function loadTransactions() {
-                        const response = await fetch('/api/transactions', {
-                            headers: { 'Authorization': 'Bearer ' + authToken }
-                        });
-
-                        const transactions = await response.json();
-
-                        const tbody = document.querySelector('#transactionsTable tbody');
-
-                        tbody.innerHTML = '';
-
-                        transactions.forEach(t => {
-                            const row = document.createElement('tr');
-
-                            row.innerHTML = `
-                                <td>${t.date}</td>
-                                <td>${t.type}</td>
-                                <td>${t.product}</td>
-                                <td>${t.quantity}</td>
-                                <td>${t.total}</td>
-                                <td>${t.mpesa}</td>
-                                <td>${t.cash}</td>
-                                <td>${t.debt}</td>
-                            `;
-
-                            tbody.appendChild(row);
-                        });
-                    }
         async function loadStats() {
             try {
                 const response = await fetch('/api/stats', {
@@ -1394,18 +1247,14 @@ HTML_TEMPLATE = '''
                         <div class="stat-value">KES ${(p.todayDebt || 0).toFixed(2)}</div>
                     </div>
                 `;
-            } catch (error) {
-                console.error('Failed to load stats');
-            }
+            } catch (error) { console.error('Failed to load stats'); }
         }
 
         function showTab(tab) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
             document.querySelectorAll('.nav button').forEach(el => el.classList.remove('active'));
-
             document.getElementById(tab + 'Tab').classList.remove('hidden');
             document.getElementById('tab-' + tab).classList.add('active');
-
             if (tab === 'inventory') loadInventory();
             if (tab === 'transactions') loadTransactions();
             if (tab === 'stats') loadStats();
@@ -1420,17 +1269,10 @@ HTML_TEMPLATE = '''
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-
-    const today =
-        new Date().toISOString().split('T')[0];
-
-    const restockDate =
-        document.getElementById('restockDate');
-
-    if (restockDate) {
-        restockDate.value = today;
-    }
-});
+            const today = new Date().toISOString().split('T')[0];
+            const restockDate = document.getElementById('restockDate');
+            if (restockDate) { restockDate.value = today; }
+        });
     </script>
 </body>
 </html>
