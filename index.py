@@ -206,6 +206,20 @@ def record_sale():
 
     save_inventory()
     save_sales()
+    for item in items:
+    append_to_sheet(
+        "Sales",
+        [
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            item['name'],
+            item['quantity'],
+            item['price'],
+            item['price'] * item['quantity'],
+            mpesa,
+            cash,
+            debt
+        ]
+    )
     return jsonify({'success': True})
 
 @app.route('/api/restock', methods=['POST'])
@@ -228,6 +242,16 @@ def record_restock():
         })
         save_inventory()
         save_restocks()
+        append_to_sheet(
+    "Restocks",
+    [
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        product,
+        qty,
+        inventory_data[product]['price'],
+        inventory_data[product]['price'] * qty
+    ]
+)
         return jsonify({'success': True})
     return jsonify({'error': 'Product not found'}), 404
 
@@ -452,6 +476,33 @@ HTML_TEMPLATE = '''
         .payment-match { color: #27ae60; font-weight: bold; }
         .payment-mismatch { color: #e74c3c; font-weight: bold; }
         .out-of-stock { opacity: 0.5; pointer-events: none; }
+    .pos-layout{
+    display:flex;
+    gap:20px;
+    align-items:flex-start;
+}
+
+.products-panel{
+    flex:2;
+}
+
+.cart-panel{
+    flex:1;
+    min-width:320px;
+    position:sticky;
+    top:20px;
+}
+
+@media(max-width:768px){
+    .pos-layout{
+        flex-direction:column;
+    }
+
+    .cart-panel{
+        width:100%;
+        position:relative;
+    }
+}
     </style>
 </head>
 <body>
@@ -483,12 +534,16 @@ HTML_TEMPLATE = '''
 
                 <!-- POS Tab -->
                 <div id="posTab" class="tab-content">
-                    <div class="search-box">
+                    <div class="pos-layout">
+<div class="products-panel">
+<div class="search-box">
                         <input type="text" id="productSearch" placeholder="Search products..." onkeyup="filterProducts()">
                     </div>
                     <div class="product-grid" id="productGrid"></div>
                     
-                    <div class="cart-summary">
+                    </div>
+<div class="cart-panel">
+<div class="cart-summary">
                         <h3>Cart</h3>
                         <div id="cartItems"></div>
                         <div class="total">Total: KES <span id="cartTotal">0.00</span></div>
