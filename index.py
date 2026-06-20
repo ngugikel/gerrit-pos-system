@@ -542,6 +542,7 @@ HTML_TEMPLATE = '''
                 <div class="nav">
                     <button onclick="showTab('pos')" class="active" id="tab-pos">POS</button>
                     <button onclick="showTab('inventory')" id="tab-inventory">Inventory</button>
+                    <button onclick="showTab('restock')" id="tab-restock">Restock</button>
                     <button onclick="showTab('transactions')" id="tab-transactions">Transactions</button>
                     <button onclick="showTab('stats')" id="tab-stats">Stats</button>
                     <button onclick="logout()" class="btn-danger">Logout</button>
@@ -595,12 +596,6 @@ HTML_TEMPLATE = '''
                 <!-- Inventory Tab -->
                 <div id="inventoryTab" class="tab-content hidden">
                     <h2>Inventory Management</h2>
-                    <div style="margin: 20px 0;">
-                        <h3>Restock Product</h3>
-                        <select id="restockProduct"></select>
-                        <input type="number" id="restockQty" placeholder="Quantity" min="1">
-                        <button onclick="restock()">Restock</button>
-                    </div>
                     <table id="inventoryTable">
                         <thead>
                             <tr>
@@ -613,6 +608,30 @@ HTML_TEMPLATE = '''
                         <tbody></tbody>
                     </table>
                 </div>
+
+               <!-- Restock Tab -->
+        <div id="restockTab" class="tab-content hidden">
+        
+            <h2>Restock Inventory</h2>
+        
+            <div style="margin:20px 0;">
+                <label>Product</label>
+                <select id="restockProduct"></select>
+            </div>
+        
+            <div style="margin:20px 0;">
+                <label>Quantity</label>
+                <input type="number"
+                       id="restockQty"
+                       min="1"
+                       placeholder="Quantity">
+            </div>
+        
+            <button onclick="restock()" class="btn-success">
+                Add Stock
+            </button>
+        
+        </div>
 
                 <!-- Transactions Tab -->
                 <div id="transactionsTab" class="tab-content hidden">
