@@ -48,6 +48,27 @@ def append_to_sheet(sheet_name, row):
         print("Google Sheets Error:", str(e))
         return False
 
+def read_sheet(sheet_name):
+
+    try:
+
+        response = requests.post(
+            GOOGLE_SCRIPT_URL,
+            json={
+                "action": "read",
+                "sheet": sheet_name
+            },
+            timeout=30
+        )
+
+        return response.json()
+
+    except Exception as e:
+
+        print("READ ERROR:", e)
+
+        return []
+
 def load_data():
 
     """Load data from /tmp files or initialize"""
@@ -185,7 +206,10 @@ def get_inventory():
 def record_sale():
     data = request.get_json()
     items = data.get('items', [])
-    date = data.get('date', datetime.now().strftime('%Y-%m-%d'))
+    restock_date = data.get(
+    'date',
+    datetime.now().strftime('%Y-%m-%d')
+    )
     payments = data.get('payments', {})
 
     # Payment validation
@@ -267,7 +291,7 @@ def record_restock():
         append_to_sheet(
      "Restocks",
      [
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            restock_date,
             product,
             qty,
             inventory_data[product]['price'],
@@ -280,39 +304,97 @@ def record_restock():
 @app.route('/api/transactions')
 @token_required
 def get_transactions():
-    all_transactions = sales_data + restocks_data
-    return jsonify(sorted(all_transactions, key=lambda x: x['date'], reverse=True))
 
-@app.route('/api/stats')
-@token_required
-def get_stats():
-    today = datetime.now().strftime('%Y-%m-%d')
-    today_sales = [s for s in sales_data if s['date'] == today]
+    sales = read_sheet("Sales")
+    restocks = read_sheet("Restocks")
 
-    # Payment breakdowns
-    total_mpesa = sum(s.get('mpesa', 0) for s in sales_data)
-    total_cash = sum(s.get('cash', 0) for s in sales_data)
-    total_debt = sum(s.get('debt', 0) for s in sales_data)
+    transactions = []
 
-    today_mpesa = sum(s.get('mpesa', 0) for s in today_sales)
-    today_cash = sum(s.get('cash', 0) for s in today_sales)
-    today_debt = sum(s.get('debt', 0) for s in today_sales)
+    for row in sales:
 
-    return jsonify({
-        'totalSales': len(sales_data),
-        'totalRevenue': sum(s['total'] for s in sales_data),
-        'totalItems': sum(s['quantity'] for s in sales_data),
-        'todaySales': sum(s['total'] for s in today_sales),
-        'payments': {
-            'totalMpesa': total_mpesa,
-            'totalCash': total_cash,
-            'totalDebt': total_debt,
-            'todayMpesa': today_mpesa,
-            'todayCash': today_cash,
-            'todayDebt': today_debt
-        }
-    })
+        if len(row) >= 8:
 
+            transactions.append({
+                "date": row[0],
+                "product": row[1],
+                "quantity": row[2],
+                "unitPrice": row[3],
+                "total": row[4],
+                "mpesa": row[5],
+                "cash": row[6],
+                "debt": row[7],
+                "type": "Sale"
+            })
+
+    for row in restocks:
+
+        if len(row) >= 5:
+
+            transactions.append({
+                "date": row[0],
+                "product": row[1],
+                "quantity": row[2],
+                "unitPrice": row[3],
+                "total": row[4],
+                "type": "Restock",
+                "mpesa": 0,
+                "cash": 0,
+                "debt": 0
+            })
+
+    transactions.sort(
+        key=lambda x: x["date"],
+        reverse=True
+    )
+
+    return jsonify(transactions)
+
+        @app.route('/api/stats')
+        @token_required
+        def get_stats():
+        
+            sales = read_sheet("Sales")
+        
+            total_sales = 0
+            total_revenue = 0
+            total_items = 0
+        
+            total_mpesa = 0
+            total_cash = 0
+            total_debt = 0
+        
+            for row in sales:
+        
+                if len(row) >= 8:
+        
+                    total_sales += 1
+                    total_items += int(row[2])
+        
+                    total_revenue += float(row[4])
+        
+                    total_mpesa += float(row[5])
+                    total_cash += float(row[6])
+                    total_debt += float(row[7])
+        
+            return jsonify({
+        
+                "totalSales": total_sales,
+                "totalRevenue": total_revenue,
+                "totalItems": total_items,
+                "todaySales": total_revenue,
+        
+                "payments": {
+        
+                    "totalMpesa": total_mpesa,
+                    "totalCash": total_cash,
+                    "totalDebt": total_debt,
+        
+                    "todayMpesa": total_mpesa,
+                    "todayCash": total_cash,
+                    "todayDebt": total_debt
+                }
+            })
+            
 # HTML Template with updated JavaScript for token auth
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
@@ -610,27 +692,35 @@ HTML_TEMPLATE = '''
                 </div>
 
                <!-- Restock Tab -->
-        <div id="restockTab" class="tab-content hidden">
+                <div id="restockTab" class="tab-content hidden">
         
             <h2>Restock Inventory</h2>
         
-            <div style="margin:20px 0;">
+            <div style="margin-bottom:15px;">
+                <label>Date</label>
+                <input type="date" id="restockDate">
+            </div>
+        
+            <div style="margin-bottom:15px;">
                 <label>Product</label>
                 <select id="restockProduct"></select>
             </div>
         
-            <div style="margin:20px 0;">
+            <div style="margin-bottom:15px;">
                 <label>Quantity</label>
-                <input type="number"
-                       id="restockQty"
-                       min="1"
-                       placeholder="Quantity">
+                <input
+                    type="number"
+                    id="restockQty"
+                    min="1"
+                    placeholder="Quantity">
             </div>
         
             <button onclick="restock()" class="btn-success">
                 Add Stock
             </button>
         
+        </div>
+                
         </div>
 
                 <!-- Transactions Tab -->
@@ -965,37 +1055,78 @@ HTML_TEMPLATE = '''
         }
 
         async function restock() {
-            const product = document.getElementById('restockProduct').value;
-            const quantity = parseInt(document.getElementById('restockQty').value);
-            
-            if (!quantity || quantity < 1) {
-                showMessage('message', 'Invalid quantity', 'error');
-                return;
-            }
-            
-            try {
-                const response = await fetch('/api/restock', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + authToken
-                    },
-                    body: JSON.stringify({ product, quantity })
-                });
-                
-                if (response.ok) {
-                    showMessage('message', 'Restocked successfully!', 'success');
-                    document.getElementById('restockQty').value = '';
-                    loadInventory();
-                    loadProducts();
-                } else {
-                    const data = await response.json();
-                    showMessage('message', data.error || 'Restock failed', 'error');
-                }
-            } catch (error) {
-                showMessage('message', 'Restock failed', 'error');
-            }
+
+    const product =
+        document.getElementById('restockProduct').value;
+
+    const quantity =
+        parseInt(document.getElementById('restockQty').value);
+
+    const date =
+        document.getElementById('restockDate').value;
+
+    if (!quantity || quantity < 1) {
+
+        showMessage(
+            'message',
+            'Invalid quantity',
+            'error'
+        );
+
+        return;
+    }
+
+    try {
+
+        const response = await fetch('/api/restock', {
+
+            method: 'POST',
+
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + authToken
+            },
+
+            body: JSON.stringify({
+                product,
+                quantity,
+                date
+            })
+        });
+
+        if (response.ok) {
+
+            showMessage(
+                'message',
+                'Restocked successfully!',
+                'success'
+            );
+
+            document.getElementById('restockQty').value = '';
+
+            await loadInventory();
+            await loadProducts();
+
+        } else {
+
+            const data = await response.json();
+
+            showMessage(
+                'message',
+                data.error || 'Restock failed',
+                'error'
+            );
         }
+
+    } catch (error) {
+
+        showMessage(
+            'message',
+            'Restock failed: ' + error.message,
+            'error'
+        );
+    }
+}
 
        async function loadTransactions() {
                         alert("Transactions function started");
@@ -1108,6 +1239,19 @@ HTML_TEMPLATE = '''
             el.style.display = 'block';
             setTimeout(() => el.style.display = 'none', 3000);
         }
+
+        document.addEventListener('DOMContentLoaded', () => {
+
+    const today =
+        new Date().toISOString().split('T')[0];
+
+    const restockDate =
+        document.getElementById('restockDate');
+
+    if (restockDate) {
+        restockDate.value = today;
+    }
+});
     </script>
 </body>
 </html>
