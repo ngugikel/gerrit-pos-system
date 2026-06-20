@@ -101,24 +101,37 @@ load_data()
 
 @app.route('/test-sheet')
 def test_sheet():
+    try:
+        payload = {
+            "sheet": "Sales",
+            "row": [
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "TEST",
+                1,
+                100,
+                100,
+                100,
+                0,
+                0
+            ]
+        }
 
-    result = append_to_sheet(
-        "Sales",
-        [
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "TEST",
-            1,
-            100,
-            100,
-            100,
-            0,
-            0
-        ]
-    )
+        response = requests.post(
+            GOOGLE_SCRIPT_URL,
+            headers={"Content-Type": "application/json"},
+            data=json.dumps(payload),
+            timeout=30
+        )
 
-    return jsonify({
-        "success": result
-    })
+        return jsonify({
+            "status_code": response.status_code,
+            "response": response.text
+        })
+
+    except Exception as e:
+        return jsonify({
+            "error": str(e)
+        })
 
 @app.route('/')
 def index():
