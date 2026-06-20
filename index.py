@@ -183,30 +183,32 @@ def record_sale():
 
     save_inventory()
     save_sales()
-    
-    save_inventory()
-save_sales()
 
-print("SALE SAVED - NOW SENDING TO GOOGLE SHEETS")
+        save_inventory()
+    save_sales()
 
-for item in items:
-    print("ABOUT TO CALL append_to_sheet")
+    print("SALE SAVED - NOW SENDING TO GOOGLE SHEETS")
 
-    append_to_sheet(
-        "Sales",
-        [
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            item['name'],
-            item['quantity'],
-            item['price'],
-            item['price'] * item['quantity'],
-            mpesa,
-            cash,
-            debt
-        ]
-    )
+    for item in items:
+        print("ABOUT TO CALL append_to_sheet")
+
+        append_to_sheet(
+            "Sales",
+            [
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                item['name'],
+                item['quantity'],
+                item['price'],
+                item['price'] * item['quantity'],
+                mpesa,
+                cash,
+                debt
+            ]
+        )
+
     return jsonify({'success': True})
-
+    
+    
 @app.route('/api/restock', methods=['POST'])
 @token_required
 def record_restock():
