@@ -25,20 +25,25 @@ initial_inventory = {"all seasons 250ml": {"stock": 4.0, "price": 450.0}, "all s
 
 def append_to_sheet(sheet_name, row):
     try:
+        print("Sending to Google Sheets:", sheet_name)
+
         response = requests.post(
             GOOGLE_SCRIPT_URL,
             json={
                 "sheet": sheet_name,
                 "row": row
             },
-            timeout=10
+            timeout=20
         )
 
         print("Sheet Status:", response.status_code)
         print("Sheet Response:", response.text)
 
+        return True
+
     except Exception as e:
         print("Google Sheets Error:", str(e))
+        return False
 
 def load_data():
 
@@ -184,7 +189,7 @@ def record_sale():
     save_inventory()
     save_sales()
 
-        save_inventory()
+    save_inventory()
     save_sales()
 
     print("SALE SAVED - NOW SENDING TO GOOGLE SHEETS")
@@ -230,13 +235,13 @@ def record_restock():
         save_inventory()
         save_restocks()
         append_to_sheet(
-    "Restocks",
-    [
-        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        product,
-        qty,
-        inventory_data[product]['price'],
-        inventory_data[product]['price'] * qty
+     "Restocks",
+     [
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            product,
+            qty,
+            inventory_data[product]['price'],
+            inventory_data[product]['price'] * qty
     ]
 )
         return jsonify({'success': True})
