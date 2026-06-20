@@ -119,7 +119,7 @@ def logout():
 
 @app.route('/api/check-auth')
 def check_auth():
-    return jsonify({'authenticated': False})
+    return jsonify({'authenticated': True})
 
 @app.route('/api/products')
 def get_products():
@@ -184,9 +184,16 @@ def record_sale():
     save_inventory()
     save_sales()
     
-    for item in items:
-        append_to_sheet(
-            "Sales",
+    save_inventory()
+save_sales()
+
+print("SALE SAVED - NOW SENDING TO GOOGLE SHEETS")
+
+for item in items:
+    print("ABOUT TO CALL append_to_sheet")
+
+    append_to_sheet(
+        "Sales",
         [
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             item['name'],
