@@ -25,15 +25,16 @@ initial_inventory = {"all seasons 250ml": {"stock": 4.0, "price": 450.0}, "all s
 
 def append_to_sheet(sheet_name, row):
     try:
-        print("Sending to Google Sheets:", sheet_name)
+        payload = {
+            "sheet": sheet_name,
+            "row": row
+        }
 
         response = requests.post(
             GOOGLE_SCRIPT_URL,
-            json={
-                "sheet": sheet_name,
-                "row": row
-            },
-            timeout=20
+            headers={"Content-Type": "application/json"},
+            data=json.dumps(payload),
+            timeout=30
         )
 
         print("========== GOOGLE SHEETS ==========")
@@ -41,7 +42,7 @@ def append_to_sheet(sheet_name, row):
         print("Response:", response.text)
         print("===================================")
 
-        return True
+        return response.status_code == 200
 
     except Exception as e:
         print("Google Sheets Error:", str(e))
@@ -97,6 +98,27 @@ def token_required(f):
     return decorated
 # Load data on startup
 load_data()
+
+@app.route('/test-sheet')
+def test_sheet():
+
+    result = append_to_sheet(
+        "Sales",
+        [
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "TEST",
+            1,
+            100,
+            100,
+            100,
+            0,
+            0
+        ]
+    )
+
+    return jsonify({
+        "success": result
+    })
 
 @app.route('/')
 def index():
