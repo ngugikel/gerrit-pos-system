@@ -1,6 +1,6 @@
 from flask import Flask, jsonify, request, render_template_string
 from flask_cors import CORS
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import os
 import requests
@@ -14,14 +14,13 @@ GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2bGY0Z-dbAd6acP1k
 ADMIN_USERNAME = 'admin'
 ADMIN_PASSWORD = 'padmin123'
 
-# Global data stores - loaded from sheets on startup, kept in memory
+# Global data stores
 inventory_data = {}
 sales_data = []
 restocks_data = []
 
 
 def safe_float(value, default=0):
-    """Safely convert a value to float, handling empty strings and None"""
     if value is None or value == "" or value == " ":
         return default
     try:
@@ -31,96 +30,59 @@ def safe_float(value, default=0):
 
 
 def read_sheet(sheet_name):
-    """Read data from a Google Sheet via Apps Script"""
     try:
         response = requests.post(
             GOOGLE_SCRIPT_URL,
             json={"action": "read", "sheet": sheet_name},
             timeout=30
         )
-        print(f"Reading sheet '{sheet_name}' - Status: {response.status_code}")
-
         data = response.json()
-
         if isinstance(data, str):
             data = json.loads(data)
-
         if not isinstance(data, list):
-            print(f"Unexpected data type from sheet '{sheet_name}': {type(data)}")
             return []
-
-        print(f"Sheet '{sheet_name}' returned {len(data)} rows")
         return data
-
     except Exception as e:
         print(f"READ ERROR for sheet '{sheet_name}':", str(e))
         return []
 
 
 def append_to_sheet(sheet_name, row):
-    """Append a single row to a Google Sheet"""
     try:
-        payload = {
-            "sheet": sheet_name,
-            "row": row
-        }
-
+        payload = {"sheet": sheet_name, "row": row}
         response = requests.post(
             GOOGLE_SCRIPT_URL,
             headers={"Content-Type": "application/json"},
             data=json.dumps(payload),
             timeout=30
         )
-
-        print("========== GOOGLE SHEETS WRITE ==========")
-        print("Sheet:", sheet_name)
-        print("Row:", row)
-        print("Status:", response.status_code)
-        print("Response:", response.text)
-        print("=========================================")
-
         return response.status_code == 200
-
     except Exception as e:
         print("Google Sheets Write Error:", str(e))
         return False
 
 
 def load_inventory_from_sheet():
-    """Load inventory from Google Sheet 'Inventory' tab - READ ONLY"""
     global inventory_data
-
     data = read_sheet("Inventory")
     if not data or len(data) < 2:
-        print("No inventory data found in sheet or sheet is empty")
         return False
-
     inventory_data = {}
-
-    for row in data[1:]:  # Skip header
+    for row in data[1:]:
         if len(row) >= 3 and row[0]:
-            product_name = str(row[0]).strip()
-            stock = safe_float(row[1])
-            price = safe_float(row[2])
-
-            inventory_data[product_name] = {
-                "stock": stock,
-                "price": price
+            inventory_data[str(row[0]).strip()] = {
+                "stock": safe_float(row[1]),
+                "price": safe_float(row[2])
             }
-
-    print(f"Loaded {len(inventory_data)} products from Google Sheet 'Inventory'")
     return True
 
 
 def load_sales_from_sheet():
-    """Load sales history from Google Sheet 'Sales' tab"""
     global sales_data
-
     data = read_sheet("Sales")
     if not data or len(data) < 2:
         sales_data = []
         return
-
     sales_data = []
     for row in data[1:]:
         if len(row) >= 8:
@@ -137,21 +99,15 @@ def load_sales_from_sheet():
                     'type': 'Sale'
                 })
             except Exception as e:
-                print(f"Error parsing sales row: {row}, error: {e}")
                 continue
-
-    print(f"Loaded {len(sales_data)} sales records from Google Sheet")
 
 
 def load_restocks_from_sheet():
-    """Load restock history from Google Sheet 'Restocks' tab"""
     global restocks_data
-
     data = read_sheet("Restocks")
     if not data or len(data) < 2:
         restocks_data = []
         return
-
     restocks_data = []
     for row in data[1:]:
         if len(row) >= 5:
@@ -166,14 +122,10 @@ def load_restocks_from_sheet():
                     'type': 'Restock'
                 })
             except Exception as e:
-                print(f"Error parsing restock row: {row}, error: {e}")
                 continue
-
-    print(f"Loaded {len(restocks_data)} restock records from Google Sheet")
 
 
 def load_data():
-    """Load ALL data from Google Sheets on startup"""
     load_inventory_from_sheet()
     load_sales_from_sheet()
     load_restocks_from_sheet()
@@ -187,7 +139,6 @@ def token_required(f):
     return decorated
 
 
-# Load data on startup
 load_data()
 
 
@@ -196,23 +147,9 @@ def test_sheet():
     try:
         payload = {
             "sheet": "Sales",
-            "row": [
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "TEST",
-                1,
-                100,
-                100,
-                100,
-                0,
-                0
-            ]
+            "row": [datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "TEST", 1, 100, 100, 100, 0, 0]
         }
-        response = requests.post(
-            GOOGLE_SCRIPT_URL,
-            headers={"Content-Type": "application/json"},
-            data=json.dumps(payload),
-            timeout=30
-        )
+        response = requests.post(GOOGLE_SCRIPT_URL, headers={"Content-Type": "application/json"}, data=json.dumps(payload), timeout=30)
         return jsonify({"status_code": response.status_code, "response": response.text})
     except Exception as e:
         return jsonify({"error": str(e)})
@@ -261,7 +198,6 @@ def check_auth():
 
 @app.route('/api/products')
 def get_products():
-    """Public endpoint to get products"""
     products = []
     for name, data in inventory_data.items():
         products.append({'name': name, 'price': data['price'], 'stock': data['stock']})
@@ -312,19 +248,16 @@ def record_sale():
                 'debt': debt
             })
 
-            append_to_sheet(
-                "Sales",
-                [
-                    sale_date,  # Use the backdated date from frontend
-                    item['name'],
-                    item['quantity'],
-                    item['price'],
-                    item['price'] * item['quantity'],
-                    mpesa if mpesa > 0 else "",
-                    cash if cash > 0 else "",
-                    debt if debt > 0 else ""
-                ]
-            )
+            append_to_sheet("Sales", [
+                sale_date,
+                item['name'],
+                item['quantity'],
+                item['price'],
+                item['price'] * item['quantity'],
+                mpesa if mpesa > 0 else "",
+                cash if cash > 0 else "",
+                debt if debt > 0 else ""
+            ])
         else:
             return jsonify({'error': f'Insufficient stock for {product}'}), 400
 
@@ -341,7 +274,6 @@ def record_restock():
 
     if not product:
         return jsonify({'error': 'Product name is required'}), 400
-
     if not qty or qty < 1:
         return jsonify({'error': 'Invalid quantity'}), 400
 
@@ -357,17 +289,10 @@ def record_restock():
             'type': 'Restock'
         })
 
-        append_to_sheet(
-            "Restocks",
-            [
-                date,
-                product,
-                qty,
-                inventory_data[product]['price'],
-                "",
-                inventory_data[product]['price'] * qty
-            ]
-        )
+        append_to_sheet("Restocks", [
+            date, product, qty, inventory_data[product]['price'],
+            "", inventory_data[product]['price'] * qty
+        ])
 
         return jsonify({'success': True})
 
@@ -381,33 +306,18 @@ def get_transactions():
     load_restocks_from_sheet()
 
     transactions = []
-
     for sale in sales_data:
         transactions.append({
-            "date": sale['date'],
-            "product": sale['product'],
-            "quantity": sale['quantity'],
-            "unitPrice": sale['unitPrice'],
-            "total": sale['total'],
-            "mpesa": sale['mpesa'],
-            "cash": sale['cash'],
-            "debt": sale['debt'],
-            "type": "Sale"
+            "date": sale['date'], "product": sale['product'], "quantity": sale['quantity'],
+            "unitPrice": sale['unitPrice'], "total": sale['total'],
+            "mpesa": sale['mpesa'], "cash": sale['cash'], "debt": sale['debt'], "type": "Sale"
         })
-
     for restock in restocks_data:
         transactions.append({
-            "date": restock['date'],
-            "product": restock['product'],
-            "quantity": restock['quantity'],
-            "unitPrice": restock['unitPrice'],
-            "total": restock['total'],
-            "type": "Restock",
-            "mpesa": 0,
-            "cash": 0,
-            "debt": 0
+            "date": restock['date'], "product": restock['product'], "quantity": restock['quantity'],
+            "unitPrice": restock['unitPrice'], "total": restock['total'],
+            "type": "Restock", "mpesa": 0, "cash": 0, "debt": 0
         })
-
     transactions.sort(key=lambda x: x["date"], reverse=True)
     return jsonify(transactions)
 
@@ -417,14 +327,35 @@ def get_transactions():
 def get_stats():
     load_sales_from_sheet()
 
-    total_sales = len(sales_data)
-    total_revenue = sum(s['total'] for s in sales_data)
-    total_items = sum(s['quantity'] for s in sales_data)
+    # Get optional date range filters from query params
+    start_date = request.args.get('startDate', '')
+    end_date = request.args.get('endDate', '')
 
-    total_mpesa = sum(s['mpesa'] for s in sales_data)
-    total_cash = sum(s['cash'] for s in sales_data)
-    total_debt = sum(s['debt'] for s in sales_data)
+    filtered_sales = sales_data
 
+    # Apply date filtering if provided
+    if start_date or end_date:
+        def parse_date_str(d):
+            # Handle various date formats: "2026-04-23", "2026-04-23T21:00:00.000Z", etc.
+            try:
+                return d.split('T')[0] if 'T' in d else d
+            except:
+                return str(d)
+
+        if start_date:
+            filtered_sales = [s for s in filtered_sales if start_date <= parse_date_str(s['date'])]
+        if end_date:
+            filtered_sales = [s for s in filtered_sales if parse_date_str(s['date']) <= end_date]
+
+    total_sales = len(filtered_sales)
+    total_revenue = sum(s['total'] for s in filtered_sales)
+    total_items = sum(s['quantity'] for s in filtered_sales)
+
+    total_mpesa = sum(s['mpesa'] for s in filtered_sales)
+    total_cash = sum(s['cash'] for s in filtered_sales)
+    total_debt = sum(s['debt'] for s in filtered_sales)
+
+    # Calculate today's stats (always from all data, not filtered)
     today = datetime.now().strftime('%Y-%m-%d')
     today_sales_data = [s for s in sales_data if today in str(s['date'])]
 
@@ -445,11 +376,13 @@ def get_stats():
             "todayMpesa": today_mpesa,
             "todayCash": today_cash,
             "todayDebt": today_debt
-        }
+        },
+        "filterApplied": bool(start_date or end_date),
+        "startDate": start_date,
+        "endDate": end_date
     })
 
 
-# HTML Template with SALES BACKDATING
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -529,6 +462,8 @@ HTML_TEMPLATE = '''
         .btn-danger:hover { background: #c0392b; }
         .btn-success { background: #27ae60; }
         .btn-success:hover { background: #229954; }
+        .btn-secondary { background: #6c757d; }
+        .btn-secondary:hover { background: #545b62; }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -595,10 +530,6 @@ HTML_TEMPLATE = '''
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
             transform: translateY(-2px);
         }
-        .product-card.selected {
-            border-color: #667eea;
-            background: #f0f0ff;
-        }
         .quantity-control {
             display: flex;
             align-items: center;
@@ -635,7 +566,7 @@ HTML_TEMPLATE = '''
         .products-panel { width: 100%; }
         .cart-panel { width: 380px; }
 
-        /* Sale date picker styles */
+        /* Sale date picker */
         .sale-date-section {
             background: #fff3e0;
             border: 1px solid #ffe0b2;
@@ -661,7 +592,69 @@ HTML_TEMPLATE = '''
             margin-top: 4px;
         }
 
-        /* Restock form styles */
+        /* Stats filter styles */
+        .stats-filter-section {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        .stats-filter-section h3 {
+            color: #1565c0;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        .filter-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto auto;
+            gap: 15px;
+            align-items: end;
+        }
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+        .filter-group label {
+            font-size: 13px;
+            color: #555;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        .filter-group input {
+            margin: 0;
+        }
+        .filter-btn {
+            padding: 12px 20px;
+            height: fit-content;
+        }
+        .filter-active {
+            background: #1565c0 !important;
+        }
+        .filter-badge {
+            display: inline-block;
+            background: #1565c0;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        .quick-filters {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .quick-filters button {
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+        .quick-filters button.active {
+            background: #1565c0;
+        }
+
+        /* Restock form */
         .restock-form {
             max-width: 500px;
             background: #f8f9fa;
@@ -701,12 +694,12 @@ HTML_TEMPLATE = '''
             .pos-layout { grid-template-columns: 1fr; }
             .cart-panel { width: 100%; }
             .nav { justify-content: center; }
+            .filter-row { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Login Section -->
         <div id="loginSection" class="login-container">
             <h2 style="text-align: center; margin-bottom: 30px; color: #333;">Gerrit POS Login</h2>
             <div id="loginMessage" class="message"></div>
@@ -715,7 +708,6 @@ HTML_TEMPLATE = '''
             <button onclick="login()" style="width: 100%; margin-top: 10px;">Login</button>
         </div>
 
-        <!-- Main App Section -->
         <div id="appSection" class="main-container hidden">
             <div class="header">
                 <h1>Gerrit POS System</h1>
@@ -732,7 +724,7 @@ HTML_TEMPLATE = '''
             <div class="content">
                 <div id="message" class="message"></div>
 
-                <!-- ==================== POS TAB ==================== -->
+                <!-- POS TAB -->
                 <div id="posTab" class="tab-content">
                     <div class="pos-layout">
                         <div class="products-panel">
@@ -747,7 +739,6 @@ HTML_TEMPLATE = '''
                                 <div id="cartItems"></div>
                                 <div class="total">Total: KES <span id="cartTotal">0.00</span></div>
 
-                                <!-- SALE DATE PICKER -->
                                 <div class="sale-date-section">
                                     <label for="saleDate">📅 Sale Date</label>
                                     <input type="date" id="saleDate">
@@ -780,92 +771,94 @@ HTML_TEMPLATE = '''
                         </div>
                     </div>
                 </div>
-                <!-- ==================== END POS TAB ==================== -->
 
-                <!-- ==================== INVENTORY TAB ==================== -->
+                <!-- INVENTORY TAB -->
                 <div id="inventoryTab" class="tab-content hidden">
                     <h2>Inventory Management</h2>
                     <table id="inventoryTable">
                         <thead>
-                            <tr>
-                                <th>Product</th>
-                                <th>Stock</th>
-                                <th>Price (KES)</th>
-                                <th>Status</th>
-                            </tr>
+                            <tr><th>Product</th><th>Stock</th><th>Price (KES)</th><th>Status</th></tr>
                         </thead>
                         <tbody></tbody>
                     </table>
                 </div>
-                <!-- ==================== END INVENTORY TAB ==================== -->
 
-                <!-- ==================== RESTOCK TAB ==================== -->
+                <!-- RESTOCK TAB -->
                 <div id="restockTab" class="tab-content hidden">
                     <h2>Restock Inventory</h2>
-
                     <div class="restock-info">
                         <h4>ℹ️ How Restocking Works</h4>
                         <p>Select a product, enter the quantity received, and choose the date. The stock will be added to your current inventory and recorded in the Restocks log.</p>
                     </div>
-
                     <div class="restock-form">
                         <div class="form-group">
                             <label for="restockDate">Restock Date</label>
                             <input type="date" id="restockDate">
                             <small style="color: #666; display: block; margin-top: 4px;">You can backdate restocks by selecting a past date</small>
                         </div>
-
                         <div class="form-group">
                             <label for="restockProduct">Product</label>
                             <select id="restockProduct"></select>
                         </div>
-
                         <div class="form-group">
                             <label for="restockQty">Quantity to Add</label>
                             <input type="number" id="restockQty" min="1" placeholder="Enter quantity received">
                         </div>
-
                         <div class="form-group">
                             <label>Current Stock</label>
                             <div id="currentStockDisplay" style="padding: 12px; background: white; border-radius: 5px; border: 1px solid #ddd; color: #667eea; font-weight: bold;">
                                 Select a product to see current stock
                             </div>
                         </div>
-
-                        <button onclick="restock()" class="btn-success" style="width: 100%;">
-                            ➕ Add Stock
-                        </button>
+                        <button onclick="restock()" class="btn-success" style="width: 100%;">➕ Add Stock</button>
                     </div>
                 </div>
-                <!-- ==================== END RESTOCK TAB ==================== -->
 
-                <!-- ==================== TRANSACTIONS TAB ==================== -->
+                <!-- TRANSACTIONS TAB -->
                 <div id="transactionsTab" class="tab-content hidden">
                     <h2>Transaction History</h2>
                     <table id="transactionsTable">
                         <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Type</th>
-                                <th>Product</th>
-                                <th>Qty</th>
-                                <th>Total (KES)</th>
-                                <th>M-Pesa</th>
-                                <th>Cash</th>
-                                <th>Debt</th>
-                            </tr>
+                            <tr><th>Date</th><th>Type</th><th>Product</th><th>Qty</th><th>Total (KES)</th><th>M-Pesa</th><th>Cash</th><th>Debt</th></tr>
                         </thead>
                         <tbody></tbody>
                     </table>
                 </div>
-                <!-- ==================== END TRANSACTIONS TAB ==================== -->
 
-                <!-- ==================== STATS TAB ==================== -->
+                <!-- STATS TAB WITH DATE FILTER -->
                 <div id="statsTab" class="tab-content hidden">
                     <h2>Sales Statistics</h2>
+
+                    <div class="stats-filter-section">
+                        <h3>📊 Filter by Date Range</h3>
+
+                        <div class="quick-filters">
+                            <button onclick="setQuickFilter('today')" id="qf-today">Today</button>
+                            <button onclick="setQuickFilter('yesterday')" id="qf-yesterday">Yesterday</button>
+                            <button onclick="setQuickFilter('thisWeek')" id="qf-thisWeek">This Week</button>
+                            <button onclick="setQuickFilter('thisMonth')" id="qf-thisMonth">This Month</button>
+                            <button onclick="setQuickFilter('all')" id="qf-all" class="active">All Time</button>
+                        </div>
+
+                        <div class="filter-row">
+                            <div class="filter-group">
+                                <label for="statsStartDate">From Date</label>
+                                <input type="date" id="statsStartDate">
+                            </div>
+                            <div class="filter-group">
+                                <label for="statsEndDate">To Date</label>
+                                <input type="date" id="statsEndDate">
+                            </div>
+                            <button onclick="applyStatsFilter()" class="btn-success filter-btn">Apply Filter</button>
+                            <button onclick="clearStatsFilter()" class="btn-secondary filter-btn">Clear</button>
+                        </div>
+
+                        <div id="filterStatus" style="margin-top: 10px; font-size: 14px; color: #1565c0;"></div>
+                    </div>
+
                     <div class="stats-grid" id="statsGrid"></div>
                 </div>
-                <!-- ==================== END STATS TAB ==================== -->
+                <!-- END STATS TAB -->
 
             </div>
         </div>
@@ -876,17 +869,15 @@ HTML_TEMPLATE = '''
         let inventory = {};
         let cart = {};
         let products = [];
+        let currentStatsFilter = { startDate: '', endDate: '' };
 
         if (authToken) { checkAuth(); }
 
         async function checkAuth() {
             try {
-                const response = await fetch('/api/check-auth', {
-                    headers: { 'Authorization': 'Bearer ' + authToken }
-                });
+                const response = await fetch('/api/check-auth', { headers: { 'Authorization': 'Bearer ' + authToken } });
                 const data = await response.json();
-                if (data.authenticated) { showApp(); }
-                else { localStorage.removeItem('pos_token'); authToken = null; showLogin(); }
+                if (data.authenticated) { showApp(); } else { localStorage.removeItem('pos_token'); authToken = null; showLogin(); }
             } catch (error) { showLogin(); }
         }
 
@@ -907,8 +898,7 @@ HTML_TEMPLATE = '''
             const password = document.getElementById('password').value;
             try {
                 const response = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
                 });
                 const data = await response.json();
@@ -917,19 +907,13 @@ HTML_TEMPLATE = '''
                     localStorage.setItem('pos_token', authToken);
                     showMessage('loginMessage', 'Login successful!', 'success');
                     showApp();
-                } else {
-                    showMessage('loginMessage', data.message, 'error');
-                }
-            } catch (error) {
-                showMessage('loginMessage', 'Login failed', 'error');
-            }
+                } else { showMessage('loginMessage', data.message, 'error'); }
+            } catch (error) { showMessage('loginMessage', 'Login failed', 'error'); }
         }
 
         function logout() {
             fetch('/api/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + authToken } });
-            localStorage.removeItem('pos_token');
-            authToken = null;
-            showLogin();
+            localStorage.removeItem('pos_token'); authToken = null; showLogin();
         }
 
         async function loadProducts() {
@@ -943,9 +927,7 @@ HTML_TEMPLATE = '''
 
         async function loadInventory() {
             try {
-                const response = await fetch('/api/inventory', {
-                    headers: { 'Authorization': 'Bearer ' + authToken }
-                });
+                const response = await fetch('/api/inventory', { headers: { 'Authorization': 'Bearer ' + authToken } });
                 inventory = await response.json();
                 renderInventoryTable();
             } catch (error) { console.error('Failed to load inventory'); }
@@ -973,28 +955,19 @@ HTML_TEMPLATE = '''
 
         function filterProducts() {
             const search = document.getElementById('productSearch').value.toLowerCase();
-            const cards = document.querySelectorAll('.product-card');
-            cards.forEach(card => {
-                const name = card.querySelector('h4').textContent.toLowerCase();
-                card.style.display = name.includes(search) ? 'block' : 'none';
+            document.querySelectorAll('.product-card').forEach(card => {
+                card.style.display = card.querySelector('h4').textContent.toLowerCase().includes(search) ? 'block' : 'none';
             });
         }
 
-        function getQtyElementId(productName) {
-            return 'qty-' + encodeURIComponent(productName);
-        }
+        function getQtyElementId(productName) { return 'qty-' + encodeURIComponent(productName); }
 
         function updateCart(product, change) {
             if (!cart[product]) cart[product] = 0;
             cart[product] += change;
             if (cart[product] < 0) cart[product] = 0;
-
             const productData = products.find(p => p.name === product);
-            if (cart[product] > productData.stock) {
-                cart[product] = productData.stock;
-                showMessage('message', 'Not enough stock!', 'error');
-            }
-
+            if (cart[product] > productData.stock) { cart[product] = productData.stock; showMessage('message', 'Not enough stock!', 'error'); }
             const qtyEl = document.getElementById(getQtyElementId(product));
             if (qtyEl) qtyEl.textContent = cart[product];
             updateCartDisplay();
@@ -1004,28 +977,19 @@ HTML_TEMPLATE = '''
         function updateCartDisplay() {
             const container = document.getElementById('cartItems');
             container.innerHTML = '';
-            if (Object.keys(cart).length === 0) {
-                document.getElementById('cartTotal').textContent = '0.00';
-                return;
-            }
-
+            if (Object.keys(cart).length === 0) { document.getElementById('cartTotal').textContent = '0.00'; return; }
             let total = 0;
             Object.entries(cart).forEach(([product, qty]) => {
                 if (qty > 0) {
                     const productData = products.find(p => p.name === product);
                     const itemTotal = productData.price * qty;
                     total += itemTotal;
-
                     const div = document.createElement('div');
                     div.className = 'cart-item';
-                    div.innerHTML = `
-                        <span>${product} x ${qty} @ KES ${productData.price.toFixed(2)}</span>
-                        <span>KES ${itemTotal.toFixed(2)}</span>
-                    `;
+                    div.innerHTML = `<span>${product} x ${qty} @ KES ${productData.price.toFixed(2)}</span><span>KES ${itemTotal.toFixed(2)}</span>`;
                     container.appendChild(div);
                 }
             });
-
             document.getElementById('cartTotal').textContent = total.toFixed(2);
         }
 
@@ -1033,84 +997,48 @@ HTML_TEMPLATE = '''
             const mpesa = parseFloat(document.getElementById('payMpesa').value) || 0;
             const cash = parseFloat(document.getElementById('payCash').value) || 0;
             const debt = parseFloat(document.getElementById('payDebt').value) || 0;
-
             const paymentTotal = mpesa + cash + debt;
             const cartTotal = parseFloat(document.getElementById('cartTotal').textContent) || 0;
-
             document.getElementById('paymentTotal').textContent = paymentTotal.toFixed(2);
-
             const matchEl = document.getElementById('paymentMatch');
-            if (Math.abs(paymentTotal - cartTotal) < 0.01 && cartTotal > 0) {
-                matchEl.textContent = '✓ Balanced';
-                matchEl.className = 'payment-match';
-            } else if (cartTotal > 0) {
-                matchEl.textContent = '✗ Mismatch';
-                matchEl.className = 'payment-mismatch';
-            } else {
-                matchEl.textContent = '';
-            }
+            if (Math.abs(paymentTotal - cartTotal) < 0.01 && cartTotal > 0) { matchEl.textContent = '✓ Balanced'; matchEl.className = 'payment-match'; }
+            else if (cartTotal > 0) { matchEl.textContent = '✗ Mismatch'; matchEl.className = 'payment-mismatch'; }
+            else { matchEl.textContent = ''; }
         }
 
         async function checkout() {
-            const items = Object.entries(cart)
-                .filter(([_, qty]) => qty > 0)
-                .map(([name, quantity]) => {
-                    const product = products.find(p => p.name === name);
-                    return { name, quantity, price: product.price };
-                });
-
-            if (items.length === 0) {
-                showMessage('message', 'Cart is empty!', 'error');
-                return;
-            }
-
+            const items = Object.entries(cart).filter(([_, qty]) => qty > 0).map(([name, quantity]) => {
+                const product = products.find(p => p.name === name);
+                return { name, quantity, price: product.price };
+            });
+            if (items.length === 0) { showMessage('message', 'Cart is empty!', 'error'); return; }
             const mpesa = parseFloat(document.getElementById('payMpesa').value) || 0;
             const cash = parseFloat(document.getElementById('payCash').value) || 0;
             const debt = parseFloat(document.getElementById('payDebt').value) || 0;
-
-            // Get the sale date (for backdating)
             const saleDate = document.getElementById('saleDate').value || new Date().toISOString().split('T')[0];
-
             const totalAmount = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
             const totalPaid = mpesa + cash + debt;
-
             if (Math.abs(totalPaid - totalAmount) > 0.01) {
                 showMessage('message', `Payment total (KES ${totalPaid.toFixed(2)}) does not match sale total (KES ${totalAmount.toFixed(2)})`, 'error');
                 return;
             }
-
             try {
                 const response = await fetch('/api/sale', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + authToken
-                    },
-                    body: JSON.stringify({ 
-                        items,
-                        payments: { mpesa, cash, debt },
-                        date: saleDate  // Send the backdated date
-                    })
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+                    body: JSON.stringify({ items, payments: { mpesa, cash, debt }, date: saleDate })
                 });
-
                 if (response.ok) {
                     showMessage('message', 'Sale completed successfully!', 'success');
-                    cart = {};
-                    updateCartDisplay();
+                    cart = {}; updateCartDisplay();
                     document.querySelectorAll('[id^="qty-"]').forEach(el => { el.textContent = '0'; });
                     document.getElementById('payMpesa').value = '';
                     document.getElementById('payCash').value = '';
                     document.getElementById('payDebt').value = '';
                     updatePaymentDisplay();
-                    await loadProducts();
-                    await loadInventory();
-                } else {
-                    const data = await response.json();
-                    showMessage('message', data.error || 'Sale failed', 'error');
-                }
-            } catch (error) {
-                showMessage('message', 'Sale failed: ' + error.message, 'error');
-            }
+                    await loadProducts(); await loadInventory();
+                } else { const data = await response.json(); showMessage('message', data.error || 'Sale failed', 'error'); }
+            } catch (error) { showMessage('message', 'Sale failed: ' + error.message, 'error'); }
         }
 
         function renderInventoryTable() {
@@ -1118,12 +1046,7 @@ HTML_TEMPLATE = '''
             tbody.innerHTML = '';
             Object.entries(inventory).forEach(([name, data]) => {
                 const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${name}</td>
-                    <td class="${data.stock < 5 ? 'low-stock' : ''}">${data.stock}</td>
-                    <td>${data.price.toFixed(2)}</td>
-                    <td>${data.stock < 5 ? 'Low Stock' : 'OK'}</td>
-                `;
+                row.innerHTML = `<td>${name}</td><td class="${data.stock < 5 ? 'low-stock' : ''}">${data.stock}</td><td>${data.price.toFixed(2)}</td><td>${data.stock < 5 ? 'Low Stock' : 'OK'}</td>`;
                 tbody.appendChild(row);
             });
         }
@@ -1131,19 +1054,15 @@ HTML_TEMPLATE = '''
         function populateRestockSelect() {
             const select = document.getElementById('restockProduct');
             select.innerHTML = '';
-
             const defaultOption = document.createElement('option');
-            defaultOption.value = '';
-            defaultOption.textContent = '-- Select a product --';
+            defaultOption.value = ''; defaultOption.textContent = '-- Select a product --';
             select.appendChild(defaultOption);
-
             products.forEach(product => {
                 const option = document.createElement('option');
                 option.value = product.name;
                 option.textContent = `${product.name} (Current: ${product.stock})`;
                 select.appendChild(option);
             });
-
             select.addEventListener('change', updateRestockStockDisplay);
         }
 
@@ -1151,19 +1070,10 @@ HTML_TEMPLATE = '''
             const select = document.getElementById('restockProduct');
             const display = document.getElementById('currentStockDisplay');
             const selectedProduct = select.value;
-
-            if (!selectedProduct) {
-                display.textContent = 'Select a product to see current stock';
-                display.style.color = '#667eea';
-                return;
-            }
-
+            if (!selectedProduct) { display.textContent = 'Select a product to see current stock'; display.style.color = '#667eea'; return; }
             const product = products.find(p => p.name === selectedProduct);
             if (product) {
-                display.innerHTML = `
-                    <span style="font-size: 24px;">${product.stock}</span> units in stock<br>
-                    <small>Unit Price: KES ${product.price.toFixed(2)}</small>
-                `;
+                display.innerHTML = `<span style="font-size: 24px;">${product.stock}</span> units in stock<br><small>Unit Price: KES ${product.price.toFixed(2)}</small>`;
                 display.style.color = product.stock < 5 ? '#e74c3c' : '#27ae60';
             }
         }
@@ -1172,72 +1082,120 @@ HTML_TEMPLATE = '''
             const product = document.getElementById('restockProduct').value;
             const quantity = parseInt(document.getElementById('restockQty').value);
             const date = document.getElementById('restockDate').value;
-
-            if (!product) {
-                showMessage('message', 'Please select a product', 'error');
-                return;
-            }
-
-            if (!quantity || quantity < 1) {
-                showMessage('message', 'Please enter a valid quantity (minimum 1)', 'error');
-                return;
-            }
-
+            if (!product) { showMessage('message', 'Please select a product', 'error'); return; }
+            if (!quantity || quantity < 1) { showMessage('message', 'Please enter a valid quantity (minimum 1)', 'error'); return; }
             try {
                 const response = await fetch('/api/restock', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + authToken
-                    },
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
                     body: JSON.stringify({ product, quantity, date })
                 });
-
                 if (response.ok) {
                     showMessage('message', `Successfully added ${quantity} units to ${product}!`, 'success');
                     document.getElementById('restockQty').value = '';
                     document.getElementById('restockProduct').value = '';
                     updateRestockStockDisplay();
-                    await loadInventory();
-                    await loadProducts();
-                } else {
-                    const data = await response.json();
-                    showMessage('message', data.error || 'Restock failed', 'error');
-                }
-            } catch (error) {
-                showMessage('message', 'Restock failed: ' + error.message, 'error');
-            }
+                    await loadInventory(); await loadProducts();
+                } else { const data = await response.json(); showMessage('message', data.error || 'Restock failed', 'error'); }
+            } catch (error) { showMessage('message', 'Restock failed: ' + error.message, 'error'); }
         }
 
         async function loadTransactions() {
-            const response = await fetch('/api/transactions', {
-                headers: { 'Authorization': 'Bearer ' + authToken }
-            });
+            const response = await fetch('/api/transactions', { headers: { 'Authorization': 'Bearer ' + authToken } });
             const transactions = await response.json();
             const tbody = document.querySelector('#transactionsTable tbody');
             tbody.innerHTML = '';
             transactions.forEach(t => {
                 const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${t.date}</td>
-                    <td>${t.type}</td>
-                    <td>${t.product}</td>
-                    <td>${t.quantity}</td>
-                    <td>${t.total}</td>
-                    <td>${t.mpesa}</td>
-                    <td>${t.cash}</td>
-                    <td>${t.debt}</td>
-                `;
+                row.innerHTML = `<td>${t.date}</td><td>${t.type}</td><td>${t.product}</td><td>${t.quantity}</td><td>${t.total}</td><td>${t.mpesa}</td><td>${t.cash}</td><td>${t.debt}</td>`;
                 tbody.appendChild(row);
             });
         }
 
+        // ==================== STATS DATE FILTER FUNCTIONS ====================
+
+        function getTodayStr() { return new Date().toISOString().split('T')[0]; }
+
+        function getYesterdayStr() {
+            const d = new Date(); d.setDate(d.getDate() - 1);
+            return d.toISOString().split('T')[0];
+        }
+
+        function getWeekStartStr() {
+            const d = new Date(); d.setDate(d.getDate() - d.getDay());
+            return d.toISOString().split('T')[0];
+        }
+
+        function getMonthStartStr() {
+            const d = new Date(); d.setDate(1);
+            return d.toISOString().split('T')[0];
+        }
+
+        function setQuickFilter(period) {
+            // Remove active class from all
+            document.querySelectorAll('.quick-filters button').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('qf-' + period).classList.add('active');
+
+            const today = getTodayStr();
+            let start = '', end = today;
+
+            switch(period) {
+                case 'today': start = today; end = today; break;
+                case 'yesterday': start = getYesterdayStr(); end = getYesterdayStr(); break;
+                case 'thisWeek': start = getWeekStartStr(); end = today; break;
+                case 'thisMonth': start = getMonthStartStr(); end = today; break;
+                case 'all': start = ''; end = ''; break;
+            }
+
+            document.getElementById('statsStartDate').value = start;
+            document.getElementById('statsEndDate').value = end;
+
+            currentStatsFilter = { startDate: start, endDate: end };
+            loadStats();
+        }
+
+        function applyStatsFilter() {
+            const start = document.getElementById('statsStartDate').value;
+            const end = document.getElementById('statsEndDate').value;
+            currentStatsFilter = { startDate: start, endDate: end };
+
+            // Remove active from quick filters since custom range is set
+            document.querySelectorAll('.quick-filters button').forEach(btn => btn.classList.remove('active'));
+
+            loadStats();
+        }
+
+        function clearStatsFilter() {
+            document.getElementById('statsStartDate').value = '';
+            document.getElementById('statsEndDate').value = '';
+            currentStatsFilter = { startDate: '', endDate: '' };
+            document.querySelectorAll('.quick-filters button').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('qf-all').classList.add('active');
+            loadStats();
+        }
+
         async function loadStats() {
             try {
-                const response = await fetch('/api/stats', {
-                    headers: { 'Authorization': 'Bearer ' + authToken }
-                });
+                let url = '/api/stats';
+                if (currentStatsFilter.startDate || currentStatsFilter.endDate) {
+                    const params = new URLSearchParams();
+                    if (currentStatsFilter.startDate) params.append('startDate', currentStatsFilter.startDate);
+                    if (currentStatsFilter.endDate) params.append('endDate', currentStatsFilter.endDate);
+                    url += '?' + params.toString();
+                }
+
+                const response = await fetch(url, { headers: { 'Authorization': 'Bearer ' + authToken } });
                 const stats = await response.json();
+
+                // Update filter status text
+                const statusEl = document.getElementById('filterStatus');
+                if (stats.filterApplied) {
+                    const start = stats.startDate || 'beginning';
+                    const end = stats.endDate || 'today';
+                    statusEl.innerHTML = `Showing data from <strong>${start}</strong> to <strong>${end}</strong>`;
+                } else {
+                    statusEl.textContent = 'Showing all-time data';
+                }
 
                 const grid = document.getElementById('statsGrid');
                 const p = stats.payments || {};
@@ -1298,8 +1256,7 @@ HTML_TEMPLATE = '''
 
         function showMessage(elementId, text, type) {
             const el = document.getElementById(elementId);
-            el.textContent = text;
-            el.className = 'message ' + type;
+            el.textContent = text; el.className = 'message ' + type;
             el.style.display = 'block';
             setTimeout(() => el.style.display = 'none', 3000);
         }
@@ -1308,8 +1265,8 @@ HTML_TEMPLATE = '''
             const today = new Date().toISOString().split('T')[0];
             const saleDate = document.getElementById('saleDate');
             const restockDate = document.getElementById('restockDate');
-            if (saleDate) { saleDate.value = today; }
-            if (restockDate) { restockDate.value = today; }
+            if (saleDate) saleDate.value = today;
+            if (restockDate) restockDate.value = today;
         });
     </script>
 </body>
