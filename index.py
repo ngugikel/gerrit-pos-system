@@ -154,6 +154,15 @@ def test_sheet():
             "error": str(e)
         })
 
+@app.route('/debug-sheet')
+def debug_sheet():
+
+    sales = read_sheet("Sales")
+
+    return jsonify({
+        "data": sales,
+        "type": str(type(sales))
+    })
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
