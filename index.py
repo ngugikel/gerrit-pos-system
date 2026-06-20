@@ -36,8 +36,10 @@ def append_to_sheet(sheet_name, row):
             timeout=20
         )
 
-        print("Sheet Status:", response.status_code)
-        print("Sheet Response:", response.text)
+        print("========== GOOGLE SHEETS ==========")
+        print("Status:", response.status_code)
+        print("Response:", response.text)
+        print("===================================")
 
         return True
 
