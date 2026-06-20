@@ -979,52 +979,41 @@ HTML_TEMPLATE = '''
         }
 
        async function loadTransactions() {
-        try {
-            console.log("Loading transactions...");
-    
-            const response = await fetch('/api/transactions', {
-                headers: {
-                    'Authorization': 'Bearer ' + authToken
-                }
-            });
-    
-            console.log("Response:", response.status);
-    
-            const transactions = await response.json();
-    
-            console.log("Transactions received:", transactions);
-    
-            const tbody = document.querySelector('#transactionsTable tbody');
-    
-            console.log("TBODY:", tbody);
-    
-            tbody.innerHTML = '';
-    
-            transactions.forEach(t => {
-                console.log("Transaction:", t);
-    
-                const row = document.createElement('tr');
-    
-                row.innerHTML = `
-                    <td>${t.date || ''}</td>
-                    <td>${t.type || ''}</td>
-                    <td>${t.product || ''}</td>
-                    <td>${t.quantity || 0}</td>
-                    <td>KES ${Number(t.total || 0).toFixed(2)}</td>
-                    <td>${t.mpesa ? 'KES ' + Number(t.mpesa).toFixed(2) : '-'}</td>
-                    <td>${t.cash ? 'KES ' + Number(t.cash).toFixed(2) : '-'}</td>
-                    <td>${t.debt ? 'KES ' + Number(t.debt).toFixed(2) : '-'}</td>
-                `;
-    
-                tbody.appendChild(row);
-            });
-    
-            console.log("Transactions rendered");
-    
-        } catch (error) {
-            console.error("Transactions Error:", error);
-    }
-}
+                        alert("Transactions function started");
+                    
+                        const response = await fetch('/api/transactions', {
+                            headers: { 'Authorization': 'Bearer ' + authToken }
+                        });
+                    
+                        const transactions = await response.json();
+                    
+                        alert("Records found: " + transactions.length);
+                    
+                        const tbody = document.querySelector('#transactionsTable tbody');
+                    
+                        alert("Table found: " + (tbody !== null));
+                    
+                        tbody.innerHTML = '';
+                    
+                        transactions.forEach(t => {
+                            const row = document.createElement('tr');
+                    
+                            row.innerHTML = `
+                                <td>${t.date}</td>
+                                <td>${t.type}</td>
+                                <td>${t.product}</td>
+                                <td>${t.quantity}</td>
+                                <td>${t.total}</td>
+                                <td>${t.mpesa}</td>
+                                <td>${t.cash}</td>
+                                <td>${t.debt}</td>
+                            `;
+                    
+                            tbody.appendChild(row);
+                        });
+                    
+                        alert("Finished rendering");
+                    }
         async function loadStats() {
             try {
                 const response = await fetch('/api/stats', {
