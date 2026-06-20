@@ -40,8 +40,8 @@ def append_to_sheet(sheet_name, row):
 
         print("Sheet Status:", response.status_code)
         print("Sheet Response:", response.text)
-        
-     except Exception as e:
+
+    except Exception as e:
         print("Google Sheets Error:", str(e))
 
 def load_data():
@@ -215,7 +215,7 @@ def record_sale():
     
     for item in items:
         append_to_sheet(
-        "Sales",
+            "Sales",
         [
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             item['name'],
