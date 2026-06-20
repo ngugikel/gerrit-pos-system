@@ -11,7 +11,7 @@ CORS(app)
 
 GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2bGY0Z-dbAd6acP1kslfMjznNgYwMv3Kydka9lm9_e2HvNjJj108tBaOR8WuEaVGR9w/exec'
 
-# File paths for persistence (Vercel /tmp directory)
+# File paths for local persistence (fallback only)
 INVENTORY_FILE = '/tmp/inventory.json'
 SALES_FILE = '/tmp/sales.json'
 RESTOCKS_FILE = '/tmp/restocks.json'
@@ -20,10 +20,43 @@ RESTOCKS_FILE = '/tmp/restocks.json'
 ADMIN_USERNAME = 'admin'
 ADMIN_PASSWORD = 'padmin123'
 
-# Initial inventory
-initial_inventory = {"all seasons 250ml": {"stock": 4.0, "price": 450.0}, "all seasons 375ml": {"stock": 0.0, "price": 650.0}, "all seasons 750ml": {"stock": 2.0, "price": 1300.0}, "Alter Wine": {"stock": 1.0, "price": 1400.0}, "Asconi": {"stock": 1.0, "price": 1950.0}, "Best Gin  250ml": {"stock": 0.0, "price": 320.0}, "Best Gin  750ml": {"stock": 0.0, "price": 900.0}, "Best vodka 250ml": {"stock": 0.0, "price": 300.0}, "Best vodka 750ml": {"stock": 3.0, "price": 850.0}, "Best whisky 750ml": {"stock": 0.0, "price": 1150.0}, "Best whisky 250ml": {"stock": 0.0, "price": 300.0}, "Blue ice": {"stock": 4.0, "price": 180.0}, "Bacardi": {"stock": 1.0, "price": 2700.0}, "balozi": {"stock": 6.0, "price": 240.0}, "Bombay Saphire": {"stock": 1.0, "price": 3450.0}, "Beefeater London 750ml": {"stock": 1.0, "price": 2350.0}, "beefeater pink 750ml": {"stock": 3.0, "price": 3150.0}, "beefeater pink 1litre": {"stock": 1.0, "price": 3150.0}, "beefeater london gin 1000ml": {"stock": 1.0, "price": 2850.0}, "black $ white 1000ml": {"stock": 0.0, "price": 1850.0}, "black $ white 750ml": {"stock": 0.0, "price": 1400.0}, "black $ white 350ml": {"stock": 1.0, "price": 730.0}, "bond 7 750ml": {"stock": 2.0, "price": 1600.0}, "bond 7 250ml": {"stock": 3.0, "price": 500.0}, "Black Label 1000ml": {"stock": 0.0, "price": 4500.0}, "Black Label 750ml": {"stock": 1.0, "price": 3700.0}, "black label 350ml": {"stock": 2.0, "price": 2100.0}, "Back label 250ml": {"stock": 2.0, "price": 0.0}, "black $ white 250ml": {"stock": 0.0, "price": 500.0}, "black bird": {"stock": 1.0, "price": 1100.0}, "captain morgan 1 litre (spiced)": {"stock": 1.0, "price": 2800.0}, "captain morgan 750ml": {"stock": 4.0, "price": 1150.0}, "captain morgan 250ml": {"stock": 4.0, "price": 400.0}, "chrome gin 750ml": {"stock": 3.0, "price": 700.0}, "chrome gin 250ml": {"stock": 6.0, "price": 250.0}, "chrome vodka 750ml": {"stock": 3.0, "price": 700.0}, "chrome vodka 250ml": {"stock": 7.0, "price": 250.0}, "circo": {"stock": 1.0, "price": 4500.0}, "chivas regal": {"stock": 1.0, "price": 4400.0}, "caprice sweet red": {"stock": 0.0, "price": 950.0}, "caprice white": {"stock": 1.0, "price": 950.0}, "crazy cock 750ml": {"stock": 0.0, "price": 1150.0}, "crazy cock 350ml": {"stock": 0.0, "price": 650.0}, "crazy cock 250ml": {"stock": 1.0, "price": 450.0}, "caribia gin 750ml": {"stock": 2.0, "price": 870.0}, "caribia gin 350ml": {"stock": 0.0, "price": 0.0}, "caribia gin 250ml": {"stock": 4.0, "price": 300.0}, "county 750ml": {"stock": 1.0, "price": 800.0}, "county 250ml": {"stock": 4.0, "price": 300.0}, "Camino tequlla ": {"stock": 0.0, "price": 2600.0}, "clubman 750ml ": {"stock": 1.0, "price": 900.0}, "cellar cask 5litre": {"stock": 1.0, "price": 4500.0}, "cellar cask Red 750ml": {"stock": 1.0, "price": 1050.0}, "chamdor Red": {"stock": 1.0, "price": 900.0}, "desperado": {"stock": 2.0, "price": 350.0}, "drostdy sweet red": {"stock": 4.0, "price": 1150.0}, "drostdy Sweet white": {"stock": 1.0, "price": 1150.0}, "delush Red": {"stock": 1.0, "price": 1000.0}, "eristoff": {"stock": 1.0, "price": 1400.0}, "first choice 750ml": {"stock": 3.0, "price": 800.0}, "famous grouse 1litre": {"stock": 1.0, "price": 2800.0}, "famous grouse 750ml": {"stock": 1.0, "price": 2150.0}, "faxe": {"stock": 5.0, "price": 340.0}, "gordons pink 1litre": {"stock": 2.0, "price": 2800.0}, "gordons pink 750ml": {"stock": 1.0, "price": 2300.0}, "gordons original 1litre": {"stock": 0.0, "price": 2900.0}, "gordons original 750ml": {"stock": 0.0, "price": 2400.0}, "gordons lemon 750ml": {"stock": 1.0, "price": 2300.0}, "gordons orange": {"stock": 0.0, "price": 2300.0}, "glenfiddich": {"stock": 2.0, "price": 7400.0}, "gilbeys pink 750ml": {"stock": 1.0, "price": 1600.0}, "gilbeys pink 350ml": {"stock": 1.0, "price": 710.0}, "gilbeys pink 250ml": {"stock": 1.0, "price": 500.0}, "gilbeys original 750ml": {"stock": 1.0, "price": 1600.0}, "gilgeys original 350ml": {"stock": 1.0, "price": 710.0}, "gilbeys 250ml": {"stock": 2.0, "price": 500.0}, "gibsons 750ml": {"stock": 0.0, "price": 1600.0}, "gibsons 350ml": {"stock": 0.0, "price": 0.0}, "gibsons 250ml": {"stock": 0.0, "price": 0.0}, "glen silver": {"stock": 2.0, "price": 1700.0}, "guinness": {"stock": 6.0, "price": 270.0}, "general meakins": {"stock": 3.0, "price": 270.0}, "grande france White Semi- Sweet": {"stock": 1.0, "price": 1400.0}, "hunters choice 750ml": {"stock": 4.0, "price": 1100.0}, "hunters choice 350": {"stock": 5.0, "price": 550.0}, "hunters choice 250ml": {"stock": 6.0, "price": 450.0}, "hunters gold": {"stock": 2.0, "price": 250.0}, "heinekein": {"stock": 6.0, "price": 290.0}, "henessy SP 750ML": {"stock": 1.0, "price": 6000.0}, "hendricks 1litre": {"stock": 1.0, "price": 5000.0}, "hendricks 750ml": {"stock": 3.0, "price": 4000.0}, "imperial blue 750ml": {"stock": 3.0, "price": 1050.0}, "jack daniel original": {"stock": 0.0, "price": 0.0}, "jack daniel  750ml (honey)": {"stock": 1.0, "price": 4500.0}, "jagermeister 1lite ": {"stock": 1.5, "price": 3400.0}, "jagermeister 750ml": {"stock": 1.0, "price": 2800.0}, "jameson 1lite": {"stock": 0.0, "price": 3600.0}, "jameson 750ml": {"stock": 0.0, "price": 2950.0}, "jameson 350ml": {"stock": 2.0, "price": 1450.0}, "jameson 250ml": {"stock": 0.0, "price": 0.0}, "j $ b 750ml": {"stock": 1.0, "price": 1900.0}, "jose quavo 750ml": {"stock": 0.0, "price": 2900.0}, "kc smooth 750 ml": {"stock": 2.0, "price": 900.0}, "kc smooth 350ml": {"stock": 1.0, "price": 450.0}, "kc smooth 250ml": {"stock": 3.0, "price": 320.0}, "kc pineapple 750ml": {"stock": 3.0, "price": 900.0}, "kc pineapple 350ml": {"stock": 0.0, "price": 450.0}, "kc pineapple 250ml": {"stock": 5.0, "price": 320.0}, "kc ginger $ lemon 750ml": {"stock": 3.0, "price": 900.0}, "kc ginger $ lemon 350ml": {"stock": 0.0, "price": 450.0}, "kc ginnger $ lemon 250ml": {"stock": 6.0, "price": 320.0}, "kibao voka 750ml": {"stock": 2.0, "price": 780.0}, "kibao voka 350ml": {"stock": 0.0, "price": 450.0}, "kibao vodka 250ml": {"stock": 4.0, "price": 300.0}, "kibao gin 750ml": {"stock": 2.0, "price": 750.0}, "kibao gin 350ml": {"stock": 0.0, "price": 450.0}, "kibao  gin 250ml": {"stock": 4.0, "price": 260.0}, "konyagi 750ml": {"stock": 2.0, "price": 800.0}, "konyagi 500ml": {"stock": 0.0, "price": 550.0}, "konyagi 250ml": {"stock": 5.0, "price": 300.0}, "kane 750ml": {"stock": 4.0, "price": 750.0}, "kane 250ml": {"stock": 0.0, "price": 250.0}, "k.o tonic ": {"stock": 1.0, "price": 150.0}, "k.o  bottle": {"stock": 3.0, "price": 300.0}, "leadimg warigi 750ml": {"stock": 1.0, "price": 770.0}, "mara (wine) Red": {"stock": 1.0, "price": 1300.0}, "mikado(cherry)": {"stock": 1.0, "price": 1600.0}, "mikado (pineapple)": {"stock": 1.0, "price": 1600.0}, "malibu": {"stock": 1.0, "price": 2350.0}, "ministers reserve 750ml": {"stock": 1.0, "price": 1600.0}, "monkey shoulder": {"stock": 1.0, "price": 4500.0}, "martini": {"stock": 1.0, "price": 2700.0}, "monster": {"stock": 4.0, "price": 250.0}, "manyatta (can)": {"stock": 1.0, "price": 300.0}, "manyatta ( bottle)": {"stock": 3.0, "price": 300.0}, "namaqua sweet red (wine)": {"stock": 2.0, "price": 1000.0}, "o pm vodka 750ml": {"stock": 2.0, "price": 1250.0}, "o pm vodka 350ml": {"stock": 1.0, "price": 680.0}, "o pm vodka 250ml": {"stock": 2.0, "price": 450.0}, "old monk": {"stock": 1.0, "price": 1050.0}, "oj 16%": {"stock": 6.0, "price": 400.0}, "oj 12%": {"stock": 0.0, "price": 320.0}, "Old smuggler": {"stock": 1.0, "price": 1400.0}, "paddy irish": {"stock": 0.0, "price": 1500.0}, "passport scotch": {"stock": 1.0, "price": 1350.0}, "pervack 1litre": {"stock": 1.0, "price": 1500.0}, "pervack  750ml": {"stock": 0.0, "price": 1300.0}, "penasol white wine": {"stock": 2.0, "price": 950.0}, "penasol red wine": {"stock": 1.0, "price": 950.0}, "robertson 1.5litre": {"stock": 1.0, "price": 2100.0}, "robertson 750ml": {"stock": 1.0, "price": 1200.0}, "red label 1litre ": {"stock": 0.0, "price": 2700.0}, "red label 750ml": {"stock": 0.0, "price": 2300.0}, "red label 350ml": {"stock": 0.0, "price": 1050.0}, "red label 250ml": {"stock": 0.0, "price": 700.0}, "redbull": {"stock": 0.0, "price": 230.0}, "rosso nobile (wine)": {"stock": 2.0, "price": 1500.0}, "smirnoff vodka 1litre": {"stock": 1.0, "price": 2000.0}, "smirnoff vodka 750ml": {"stock": 1.0, "price": 1600.0}, "smirnoff vodka 350ml": {"stock": 0.0, "price": 750.0}, "smirnoff vodka 250ml": {"stock": 2.0, "price": 510.0}, "smirnoff pineapple punch ": {"stock": 5.0, "price": 220.0}, "smirnoff guaranna": {"stock": 5.0, "price": 220.0}, "smirnoff black ice": {"stock": 18.0, "price": 220.0}, "sweet berry ": {"stock": 2.0, "price": 150.0}, "strumbras": {"stock": 2.0, "price": 700.0}, "savanna": {"stock": 3.0, "price": 300.0}, "southern comfort 1litre": {"stock": 1.0, "price": 2700.0}, "southern comfort 750ml": {"stock": 3.0, "price": 2400.0}, "southern comfort 350ml": {"stock": 3.0, "price": 750.0}, "sky infusion ": {"stock": 2.0, "price": 1500.0}, "star walker ": {"stock": 1.0, "price": 1500.0}, "sun chaser(wine)": {"stock": 1.0, "price": 950.0}, "singleton ": {"stock": 1.0, "price": 5700.0}, "tanqueray  1litre ( no 10)": {"stock": 1.0, "price": 6050.0}, " tanqueray 750ml ( no 10)                 ": {"stock": 1.0, "price": 5050.0}, "tanqueray  gin 1litre": {"stock": 0.0, "price": 3750.0}, "tanqueray  gin 750ml": {"stock": 1.0, "price": 2850.0}, "top secret 750ml": {"stock": 0.0, "price": 870.0}, "top secret 250ml": {"stock": 3.0, "price": 310.0}, "three barrels 750ml": {"stock": 1.0, "price": 2850.0}, "tusker lager (can)": {"stock": 4.0, "price": 240.0}, "tusker cider (can)": {"stock": 10.0, "price": 280.0}, "tusker malt (green)": {"stock": 1.0, "price": 300.0}, "versus white (wine)": {"stock": 1.0, "price": 1200.0}, "VAT 69  1 LITRE": {"stock": 0.0, "price": 2200.0}, "VAT 69  750ML": {"stock": 0.0, "price": 900.0}, "VAT 69 350ML": {"stock": 0.0, "price": 950.0}, "VAT 69 250ML": {"stock": 1.0, "price": 650.0}, "Viceroy 750ml": {"stock": 2.0, "price": 1500.0}, "viceroy 350ml": {"stock": 2.0, "price": 760.0}, "viceroy 250ml": {"stock": 2.0, "price": 520.0}, "V$A imperial ": {"stock": 1.0, "price": 900.0}, "wild turkey (bourbon)": {"stock": 1.0, "price": 4200.0}, "white cap (can)": {"stock": 6.0, "price": 270.0}, "william lawsons 1litre": {"stock": 1.0, "price": 3000.0}, "william lawsons 750ml": {"stock": 0.0, "price": 2000.0}, "william lawsons 350ml": {"stock": 2.0, "price": 1050.0}, "william lawsons 250ml": {"stock": 0.0, "price": 0.0}, "zappa black": {"stock": 1.0, "price": 1750.0}, "zappa original": {"stock": 1.0, "price": 1750.0}, "zappa blue": {"stock": 1.0, "price": 1750.0}, "# 7": {"stock": 1.0, "price": 1200.0}, "58 gin": {"stock": 1.0, "price": 1450.0}, " miniute maid ": {"stock": 8.0, "price": 160.0}, "water 500ml ": {"stock": 12.0, "price": 30.0}, "water  dasani": {"stock": 5.0, "price": 70.0}, "soda 2litre": {"stock": 6.0, "price": 200.0}, "sodalitre 1litre": {"stock": 8.0, "price": 120.0}, "dunhill double switch": {"stock": 0.0, "price": 600.0}, "dunhill single switch": {"stock": 0.0, "price": 600.0}, "pall mall (king safari)": {"stock": 0.0, "price": 300.0}, "pall mall ( menthol)": {"stock": 0.0, "price": 300.0}, "oris milano": {"stock": 0.0, "price": 400.0}, "oris menthol": {"stock": 0.0, "price": 400.0}, "rothmans red ": {"stock": 0.0, "price": 500.0}, "rothmans blue": {"stock": 0.0, "price": 500.0}, "dunhill embassy": {"stock": 0.0, "price": 600.0}, "lemonade": {"stock": 3.0, "price": 50.0}, "predator": {"stock": 3.0, "price": 70.0}}
+# Global data stores
+inventory_data = {}
+sales_data = []
+restocks_data = []
+
+
+def read_sheet(sheet_name):
+    """Read data from a Google Sheet via Apps Script"""
+    try:
+        response = requests.post(
+            GOOGLE_SCRIPT_URL,
+            json={"action": "read", "sheet": sheet_name},
+            timeout=30
+        )
+        print(f"Reading sheet '{sheet_name}' - Status: {response.status_code}")
+
+        # Parse the JSON response
+        data = response.json()
+
+        # Handle case where Apps Script returns a JSON string of a 2D array
+        if isinstance(data, str):
+            data = json.loads(data)
+
+        if not isinstance(data, list):
+            print(f"Unexpected data type from sheet '{sheet_name}': {type(data)}")
+            return []
+
+        print(f"Sheet '{sheet_name}' returned {len(data)} rows")
+        return data
+
+    except Exception as e:
+        print(f"READ ERROR for sheet '{sheet_name}':", str(e))
+        return []
+
 
 def append_to_sheet(sheet_name, row):
+    """Append a single row to a Google Sheet"""
     try:
         payload = {
             "sheet": sheet_name,
@@ -37,77 +70,184 @@ def append_to_sheet(sheet_name, row):
             timeout=30
         )
 
-        print("========== GOOGLE SHEETS ==========")
+        print("========== GOOGLE SHEETS WRITE ==========")
+        print("Sheet:", sheet_name)
+        print("Row:", row)
         print("Status:", response.status_code)
         print("Response:", response.text)
-        print("===================================")
+        print("=========================================")
 
         return response.status_code == 200
 
     except Exception as e:
-        print("Google Sheets Error:", str(e))
+        print("Google Sheets Write Error:", str(e))
         return False
 
-def read_sheet(sheet_name):
 
+def sync_inventory_to_sheet():
+    """Push current inventory to Google Sheet (batch update)"""
     try:
+        rows = [["Product", "OpeningStock", "UnitPrice", "StockDate"]]
+        today = datetime.now().strftime('%Y-%m-%d')
+        for name, data in inventory_data.items():
+            rows.append([name, data["stock"], data["price"], today])
 
         response = requests.post(
             GOOGLE_SCRIPT_URL,
             json={
-                "action": "read",
-                "sheet": sheet_name
+                "action": "batchUpdate",
+                "sheet": "Inventory",
+                "rows": rows
             },
             timeout=30
         )
 
-        return response.json()
+        print("========== INVENTORY SYNC ==========")
+        print("Status:", response.status_code)
+        print("Response:", response.text)
+        print("====================================")
 
+        return response.status_code == 200
     except Exception as e:
+        print("Inventory sync error:", e)
+        return False
 
-        print("READ ERROR:", e)
 
-        return []
+def load_inventory_from_sheet():
+    """Load inventory from Google Sheet 'Inventory' tab"""
+    global inventory_data
+
+    data = read_sheet("Inventory")
+    if not data or len(data) < 2:  # Need at least header + 1 data row
+        print("No inventory data found in sheet or sheet is empty")
+        return False
+
+    inventory_data = {}
+
+    # Skip header row (row 0)
+    for row in data[1:]:
+        if len(row) >= 3 and row[0]:
+            product_name = str(row[0]).strip()
+            try:
+                stock = float(row[1]) if row[1] is not None else 0
+            except (ValueError, TypeError):
+                stock = 0
+            try:
+                price = float(row[2]) if row[2] is not None else 0
+            except (ValueError, TypeError):
+                price = 0
+
+            inventory_data[product_name] = {
+                "stock": stock,
+                "price": price
+            }
+
+    print(f"Loaded {len(inventory_data)} products from Google Sheet 'Inventory'")
+
+    # Save to local file as backup
+    save_inventory()
+    return True
+
+
+def load_sales_from_sheet():
+    """Load sales history from Google Sheet 'Sales' tab"""
+    global sales_data
+
+    data = read_sheet("Sales")
+    if not data or len(data) < 2:
+        sales_data = []
+        return
+
+    sales_data = []
+    for row in data[1:]:
+        if len(row) >= 8:
+            try:
+                sales_data.append({
+                    'date': str(row[0]),
+                    'product': str(row[1]),
+                    'quantity': float(row[2]) if row[2] is not None else 0,
+                    'unitPrice': float(row[3]) if row[3] is not None else 0,
+                    'total': float(row[4]) if row[4] is not None else 0,
+                    'mpesa': float(row[5]) if row[5] is not None else 0,
+                    'cash': float(row[6]) if row[6] is not None else 0,
+                    'debt': float(row[7]) if row[7] is not None else 0,
+                    'type': 'Sale'
+                })
+            except (ValueError, TypeError) as e:
+                print(f"Error parsing sales row: {row}, error: {e}")
+                continue
+
+    print(f"Loaded {len(sales_data)} sales records from Google Sheet")
+    save_sales()
+
+
+def load_restocks_from_sheet():
+    """Load restock history from Google Sheet 'Restocks' tab"""
+    global restocks_data
+
+    data = read_sheet("Restocks")
+    if not data or len(data) < 2:
+        restocks_data = []
+        return
+
+    restocks_data = []
+    for row in data[1:]:
+        if len(row) >= 5:
+            try:
+                restocks_data.append({
+                    'date': str(row[0]),
+                    'product': str(row[1]),
+                    'quantity': float(row[2]) if row[2] is not None else 0,
+                    'unitPrice': float(row[3]) if row[3] is not None else 0,
+                    'total': float(row[4]) if row[4] is not None else 0,
+                    'type': 'Restock'
+                })
+            except (ValueError, TypeError) as e:
+                print(f"Error parsing restock row: {row}, error: {e}")
+                continue
+
+    print(f"Loaded {len(restocks_data)} restock records from Google Sheet")
+    save_restocks()
+
 
 def load_data():
+    """Load ALL data from Google Sheets (source of truth)"""
+    # Try to load from Google Sheets first
+    sheet_loaded = load_inventory_from_sheet()
 
-    """Load data from /tmp files or initialize"""
-    global inventory_data, sales_data, restocks_data, active_tokens
-    
-    if os.path.exists(INVENTORY_FILE):
-        with open(INVENTORY_FILE, 'r') as f:
-            inventory_data = json.load(f)
-    else:
-        inventory_data = json.loads(json.dumps(initial_inventory))
-        save_inventory()
-    
-    if os.path.exists(SALES_FILE):
-        with open(SALES_FILE, 'r') as f:
-            sales_data = json.load(f)
-    else:
-        sales_data = []
-    
-    if os.path.exists(RESTOCKS_FILE):
-        with open(RESTOCKS_FILE, 'r') as f:
-            restocks_data = json.load(f)
-    else:
-        restocks_data = []
+    if not sheet_loaded:
+        # Fallback to local file if sheet fails
+        if os.path.exists(INVENTORY_FILE):
+            with open(INVENTORY_FILE, 'r') as f:
+                global inventory_data
+                inventory_data = json.load(f)
+            print("Loaded inventory from local fallback file")
+        else:
+            print("WARNING: No inventory data available!")
+            inventory_data = {}
+
+    # Load sales and restocks from sheets too
+    load_sales_from_sheet()
+    load_restocks_from_sheet()
 
 
 def save_inventory():
-    """Save inventory to /tmp"""
+    """Save inventory to /tmp (local backup only)"""
     with open(INVENTORY_FILE, 'w') as f:
         json.dump(inventory_data, f)
 
+
 def save_sales():
-    """Save sales to /tmp"""
+    """Save sales to /tmp (local backup only)"""
     with open(SALES_FILE, 'w') as f:
         json.dump(sales_data, f)
 
+
 def save_restocks():
-    """Save restocks to /tmp"""
+    """Save restocks to /tmp (local backup only)"""
     with open(RESTOCKS_FILE, 'w') as f:
         json.dump(restocks_data, f)
+
 
 def token_required(f):
     from functools import wraps
@@ -117,8 +257,11 @@ def token_required(f):
         return f(*args, **kwargs)
 
     return decorated
+
+
 # Load data on startup
 load_data()
+
 
 @app.route('/test-sheet')
 def test_sheet():
@@ -150,22 +293,29 @@ def test_sheet():
         })
 
     except Exception as e:
-        return jsonify({
-            "error": str(e)
-        })
+        return jsonify({"error": str(e)})
+
 
 @app.route('/debug-sheet')
 def debug_sheet():
-
     sales = read_sheet("Sales")
+    inventory = read_sheet("Inventory")
+    restocks = read_sheet("Restocks")
 
     return jsonify({
-        "data": sales,
-        "type": str(type(sales))
+        "inventory_rows": len(inventory),
+        "inventory_sample": inventory[:3] if inventory else [],
+        "sales_rows": len(sales),
+        "sales_sample": sales[:3] if sales else [],
+        "restocks_rows": len(restocks),
+        "restocks_sample": restocks[:3] if restocks else [],
     })
+
+
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
+
 
 @app.route('/api/login', methods=['POST'])
 def login():
@@ -185,13 +335,17 @@ def login():
         'success': False,
         'message': 'Invalid credentials'
     }), 401
+
+
 @app.route('/api/logout', methods=['POST'])
 def logout():
     return jsonify({'success': True})
 
+
 @app.route('/api/check-auth')
 def check_auth():
     return jsonify({'authenticated': True})
+
 
 @app.route('/api/products')
 def get_products():
@@ -205,20 +359,21 @@ def get_products():
         })
     return jsonify(products)
 
+
 @app.route('/api/inventory')
 @token_required
 def get_inventory():
+    # Reload from sheet to get latest data
+    load_inventory_from_sheet()
     return jsonify(inventory_data)
+
 
 @app.route('/api/sale', methods=['POST'])
 @token_required
 def record_sale():
     data = request.get_json()
     items = data.get('items', [])
-    restock_date = data.get(
-    'date',
-    datetime.now().strftime('%Y-%m-%d')
-    )
+    sale_date = data.get('date', datetime.now().strftime('%Y-%m-%d'))
     payments = data.get('payments', {})
 
     # Payment validation
@@ -234,16 +389,17 @@ def record_sale():
     if abs(total_paid - total_amount) > 0.01:
         return jsonify({'error': f'Payment total (KES {total_paid:.2f}) does not match sale total (KES {total_amount:.2f})'}), 400
 
-    # Distribute payments proportionally across items for record keeping
-    # We record the full payment details on each sale entry for the transaction log
+    # Process each item
     for item in items:
         product = item['name']
         qty = item['quantity']
 
         if product in inventory_data and inventory_data[product]['stock'] >= qty:
             inventory_data[product]['stock'] -= qty
+
+            # Add to local sales log
             sales_data.append({
-                'date': restock_date,
+                'date': sale_date,
                 'product': product,
                 'quantity': qty,
                 'unitPrice': item['price'],
@@ -253,30 +409,32 @@ def record_sale():
                 'cash': cash,
                 'debt': debt
             })
+
+            # Write to Google Sheet
+            append_to_sheet(
+                "Sales",
+                [
+                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    item['name'],
+                    item['quantity'],
+                    item['price'],
+                    item['price'] * item['quantity'],
+                    mpesa,
+                    cash,
+                    debt
+                ]
+            )
         else:
             return jsonify({'error': f'Insufficient stock for {product}'}), 400
 
+    # Sync updated inventory back to Google Sheet
+    sync_inventory_to_sheet()
     save_inventory()
     save_sales()
 
-    for item in items:
-        append_to_sheet(
-            "Sales",
-            [
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                item['name'],
-                item['quantity'],
-                item['price'],
-                item['price'] * item['quantity'],
-                mpesa,
-                cash,
-                debt
-            ]
-        )
-
     return jsonify({'success': True})
-    
-    
+
+
 @app.route('/api/restock', methods=['POST'])
 @token_required
 def record_restock():
@@ -285,8 +443,16 @@ def record_restock():
     qty = data.get('quantity')
     date = data.get('date', datetime.now().strftime('%Y-%m-%d'))
 
+    if not product:
+        return jsonify({'error': 'Product name is required'}), 400
+
+    if not qty or qty < 1:
+        return jsonify({'error': 'Invalid quantity'}), 400
+
     if product in inventory_data:
         inventory_data[product]['stock'] += qty
+
+        # Add to local restocks log
         restocks_data.append({
             'date': date,
             'product': product,
@@ -295,115 +461,110 @@ def record_restock():
             'total': inventory_data[product]['price'] * qty,
             'type': 'Restock'
         })
+
+        # Write to Google Sheet
+        append_to_sheet(
+            "Restocks",
+            [
+                date,
+                product,
+                qty,
+                inventory_data[product]['price'],
+                inventory_data[product]['price'] * qty
+            ]
+        )
+
+        # Sync updated inventory back to Google Sheet
+        sync_inventory_to_sheet()
         save_inventory()
         save_restocks()
-        append_to_sheet(
-     "Restocks",
-     [
-            restock_date,
-            product,
-            qty,
-            inventory_data[product]['price'],
-            inventory_data[product]['price'] * qty
-    ]
-)
+
         return jsonify({'success': True})
+
     return jsonify({'error': 'Product not found'}), 404
+
 
 @app.route('/api/transactions')
 @token_required
 def get_transactions():
-
-    sales = read_sheet("Sales")
-    restocks = read_sheet("Restocks")
+    # Reload from sheets to get latest data
+    load_sales_from_sheet()
+    load_restocks_from_sheet()
 
     transactions = []
 
-    for row in sales:
+    # Add sales
+    for sale in sales_data:
+        transactions.append({
+            "date": sale['date'],
+            "product": sale['product'],
+            "quantity": sale['quantity'],
+            "unitPrice": sale['unitPrice'],
+            "total": sale['total'],
+            "mpesa": sale['mpesa'],
+            "cash": sale['cash'],
+            "debt": sale['debt'],
+            "type": "Sale"
+        })
 
-        if len(row) >= 8:
+    # Add restocks
+    for restock in restocks_data:
+        transactions.append({
+            "date": restock['date'],
+            "product": restock['product'],
+            "quantity": restock['quantity'],
+            "unitPrice": restock['unitPrice'],
+            "total": restock['total'],
+            "type": "Restock",
+            "mpesa": 0,
+            "cash": 0,
+            "debt": 0
+        })
 
-            transactions.append({
-                "date": row[0],
-                "product": row[1],
-                "quantity": row[2],
-                "unitPrice": row[3],
-                "total": row[4],
-                "mpesa": row[5],
-                "cash": row[6],
-                "debt": row[7],
-                "type": "Sale"
-            })
-
-    for row in restocks:
-
-        if len(row) >= 5:
-
-            transactions.append({
-                "date": row[0],
-                "product": row[1],
-                "quantity": row[2],
-                "unitPrice": row[3],
-                "total": row[4],
-                "type": "Restock",
-                "mpesa": 0,
-                "cash": 0,
-                "debt": 0
-            })
-
-    transactions.sort(
-        key=lambda x: x["date"],
-        reverse=True
-    )
+    transactions.sort(key=lambda x: x["date"], reverse=True)
 
     return jsonify(transactions)
+
 
 @app.route('/api/stats')
 @token_required
 def get_stats():
-        
-            sales = read_sheet("Sales")
-        
-            total_sales = 0
-            total_revenue = 0
-            total_items = 0
-        
-            total_mpesa = 0
-            total_cash = 0
-            total_debt = 0
-        
-            for row in sales:
-        
-                if len(row) >= 8:
-        
-                    total_sales += 1
-                    total_items += int(row[2])
-        
-                    total_revenue += float(row[4])
-        
-                    total_mpesa += float(row[5])
-                    total_cash += float(row[6])
-                    total_debt += float(row[7])
-        
-            return jsonify({
-        
-                "totalSales": total_sales,
-                "totalRevenue": total_revenue,
-                "totalItems": total_items,
-                "todaySales": total_revenue,
-        
-                "payments": {
-        
-                    "totalMpesa": total_mpesa,
-                    "totalCash": total_cash,
-                    "totalDebt": total_debt,
-        
-                    "todayMpesa": total_mpesa,
-                    "todayCash": total_cash,
-                    "todayDebt": total_debt
-                }
-            })
-            
+    # Reload from sheet to get latest data
+    load_sales_from_sheet()
+
+    total_sales = len(sales_data)
+    total_revenue = sum(s['total'] for s in sales_data)
+    total_items = sum(s['quantity'] for s in sales_data)
+
+    total_mpesa = sum(s['mpesa'] for s in sales_data)
+    total_cash = sum(s['cash'] for s in sales_data)
+    total_debt = sum(s['debt'] for s in sales_data)
+
+    # Calculate today's stats
+    today = datetime.now().strftime('%Y-%m-%d')
+    today_sales_data = [s for s in sales_data if today in str(s['date'])]
+
+    today_revenue = sum(s['total'] for s in today_sales_data)
+    today_mpesa = sum(s['mpesa'] for s in today_sales_data)
+    today_cash = sum(s['cash'] for s in today_sales_data)
+    today_debt = sum(s['debt'] for s in today_sales_data)
+
+    return jsonify({
+        "totalSales": total_sales,
+        "totalRevenue": total_revenue,
+        "totalItems": total_items,
+        "todaySales": today_revenue,
+        "payments": {
+            "totalMpesa": total_mpesa,
+            "totalCash": total_cash,
+            "totalDebt": total_debt,
+            "todayMpesa": today_mpesa,
+            "todayCash": today_cash,
+            "todayDebt": today_debt
+        }
+    })
+
+
 # HTML Template with updated JavaScript for token auth
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
@@ -651,7 +812,7 @@ HTML_TEMPLATE = '''
                         <input type="text" id="productSearch" placeholder="Search products..." onkeyup="filterProducts()">
                     </div>
                     <div class="product-grid" id="productGrid"></div>
-                    
+
                     </div>
                         <div class="cart-panel">
                         <div class="cart-summary">
@@ -702,19 +863,19 @@ HTML_TEMPLATE = '''
 
                <!-- Restock Tab -->
                 <div id="restockTab" class="tab-content hidden">
-        
+
             <h2>Restock Inventory</h2>
-        
+
             <div style="margin-bottom:15px;">
                 <label>Date</label>
                 <input type="date" id="restockDate">
             </div>
-        
+
             <div style="margin-bottom:15px;">
                 <label>Product</label>
                 <select id="restockProduct"></select>
             </div>
-        
+
             <div style="margin-bottom:15px;">
                 <label>Quantity</label>
                 <input
@@ -723,13 +884,13 @@ HTML_TEMPLATE = '''
                     min="1"
                     placeholder="Quantity">
             </div>
-        
+
             <button onclick="restock()" class="btn-success">
                 Add Stock
             </button>
-        
+
         </div>
-                
+
         </div>
 
                 <!-- Transactions Tab -->
@@ -805,14 +966,14 @@ HTML_TEMPLATE = '''
         async function login() {
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
-            
+
             try {
                 const response = await fetch('/api/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
                 });
-                
+
                 const data = await response.json();
                 if (data.success) {
                     authToken = data.token;
@@ -863,7 +1024,7 @@ HTML_TEMPLATE = '''
         function renderProductGrid() {
             const grid = document.getElementById('productGrid');
             grid.innerHTML = '';
-            
+
             products.forEach(product => {
                 const card = document.createElement('div');
                 card.className = 'product-card' + (product.stock <= 0 ? ' out-of-stock' : '');
@@ -898,13 +1059,13 @@ HTML_TEMPLATE = '''
             if (!cart[product]) cart[product] = 0;
             cart[product] += change;
             if (cart[product] < 0) cart[product] = 0;
-            
+
             const productData = products.find(p => p.name === product);
             if (cart[product] > productData.stock) {
                 cart[product] = productData.stock;
                 showMessage('message', 'Not enough stock!', 'error');
             }
-            
+
             const qtyEl = document.getElementById(getQtyElementId(product));
             if (qtyEl) qtyEl.textContent = cart[product];
             updateCartDisplay();
@@ -921,13 +1082,13 @@ HTML_TEMPLATE = '''
         }
 
         let total = 0;
-            
+
             Object.entries(cart).forEach(([product, qty]) => {
                 if (qty > 0) {
                     const productData = products.find(p => p.name === product);
                     const itemTotal = productData.price * qty;
                     total += itemTotal;
-                    
+
                     const div = document.createElement('div');
                     div.className = 'cart-item';
                     div.innerHTML = `
@@ -937,7 +1098,7 @@ HTML_TEMPLATE = '''
                     container.appendChild(div);
                 }
             });
-            
+
             document.getElementById('cartTotal').textContent = total.toFixed(2);
         }
 
@@ -945,12 +1106,12 @@ HTML_TEMPLATE = '''
             const mpesa = parseFloat(document.getElementById('payMpesa').value) || 0;
             const cash = parseFloat(document.getElementById('payCash').value) || 0;
             const debt = parseFloat(document.getElementById('payDebt').value) || 0;
-            
+
             const paymentTotal = mpesa + cash + debt;
             const cartTotal = parseFloat(document.getElementById('cartTotal').textContent) || 0;
-            
+
             document.getElementById('paymentTotal').textContent = paymentTotal.toFixed(2);
-            
+
             const matchEl = document.getElementById('paymentMatch');
             if (Math.abs(paymentTotal - cartTotal) < 0.01 && cartTotal > 0) {
                 matchEl.textContent = '✓ Balanced';
@@ -970,24 +1131,24 @@ HTML_TEMPLATE = '''
                     const product = products.find(p => p.name === name);
                     return { name, quantity, price: product.price };
                 });
-            
+
             if (items.length === 0) {
                 showMessage('message', 'Cart is empty!', 'error');
                 return;
             }
-            
+
             const mpesa = parseFloat(document.getElementById('payMpesa').value) || 0;
             const cash = parseFloat(document.getElementById('payCash').value) || 0;
             const debt = parseFloat(document.getElementById('payDebt').value) || 0;
-            
+
             const totalAmount = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
             const totalPaid = mpesa + cash + debt;
-            
+
             if (Math.abs(totalPaid - totalAmount) > 0.01) {
                 showMessage('message', `Payment total (KES ${totalPaid.toFixed(2)}) does not match sale total (KES ${totalAmount.toFixed(2)})`, 'error');
                 return;
             }
-            
+
             try {
                 const response = await fetch('/api/sale', {
                     method: 'POST',
@@ -1000,7 +1161,7 @@ HTML_TEMPLATE = '''
                         payments: { mpesa, cash, debt }
                     })
                 });
-                
+
             if (response.ok) {
     showMessage('message', 'Sale completed successfully!', 'success');
 
@@ -1039,7 +1200,7 @@ HTML_TEMPLATE = '''
         function renderInventoryTable() {
             const tbody = document.querySelector('#inventoryTable tbody');
             tbody.innerHTML = '';
-            
+
             Object.entries(inventory).forEach(([name, data]) => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
@@ -1138,25 +1299,19 @@ HTML_TEMPLATE = '''
 }
 
        async function loadTransactions() {
-                        alert("Transactions function started");
-                    
                         const response = await fetch('/api/transactions', {
                             headers: { 'Authorization': 'Bearer ' + authToken }
                         });
-                    
+
                         const transactions = await response.json();
-                    
-                        alert("Records found: " + transactions.length);
-                    
+
                         const tbody = document.querySelector('#transactionsTable tbody');
-                    
-                        alert("Table found: " + (tbody !== null));
-                    
+
                         tbody.innerHTML = '';
-                    
+
                         transactions.forEach(t => {
                             const row = document.createElement('tr');
-                    
+
                             row.innerHTML = `
                                 <td>${t.date}</td>
                                 <td>${t.type}</td>
@@ -1167,11 +1322,9 @@ HTML_TEMPLATE = '''
                                 <td>${t.cash}</td>
                                 <td>${t.debt}</td>
                             `;
-                    
+
                             tbody.appendChild(row);
                         });
-                    
-                        alert("Finished rendering");
                     }
         async function loadStats() {
             try {
@@ -1179,7 +1332,7 @@ HTML_TEMPLATE = '''
                     headers: { 'Authorization': 'Bearer ' + authToken }
                 });
                 const stats = await response.json();
-                
+
                 const grid = document.getElementById('statsGrid');
                 const p = stats.payments || {};
                 grid.innerHTML = `
@@ -1232,10 +1385,10 @@ HTML_TEMPLATE = '''
         function showTab(tab) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
             document.querySelectorAll('.nav button').forEach(el => el.classList.remove('active'));
-            
+
             document.getElementById(tab + 'Tab').classList.remove('hidden');
             document.getElementById('tab-' + tab).classList.add('active');
-            
+
             if (tab === 'inventory') loadInventory();
             if (tab === 'transactions') loadTransactions();
             if (tab === 'stats') loadStats();
@@ -1265,6 +1418,7 @@ HTML_TEMPLATE = '''
 </body>
 </html>
 '''
+
 
 if __name__ == '__main__':
     app.run(debug=True)
