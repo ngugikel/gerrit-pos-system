@@ -234,7 +234,7 @@ def record_sale():
         if product in inventory_data and inventory_data[product]['stock'] >= qty:
             inventory_data[product]['stock'] -= qty
             sales_data.append({
-                'date': date,
+                'date': restock_date,
                 'product': product,
                 'quantity': qty,
                 'unitPrice': item['price'],
@@ -349,9 +349,9 @@ def get_transactions():
 
     return jsonify(transactions)
 
-        @app.route('/api/stats')
-        @token_required
-        def get_stats():
+@app.route('/api/stats')
+@token_required
+def get_stats():
         
             sales = read_sheet("Sales")
         
