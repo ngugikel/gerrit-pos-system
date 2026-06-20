@@ -865,7 +865,6 @@ HTML_TEMPLATE = '''
     await loadInventory();
 
     console.log("Cart cleared");
-}
                 } else {
                     const data = await response.json();
                     showMessage('message', data.error || 'Sale failed', 'error');
