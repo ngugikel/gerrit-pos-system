@@ -3,7 +3,6 @@ from flask_cors import CORS
 from datetime import datetime
 import json
 import os
-import uuid
 import requests
 
 app = Flask(__name__)
@@ -26,6 +25,26 @@ sales_data = []
 restocks_data = []
 
 
+def safe_float(value, default=0):
+    """Safely convert a value to float, handling empty strings and None"""
+    if value is None or value == "" or value == " ":
+        return default
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+
+def safe_int(value, default=0):
+    """Safely convert a value to int, handling empty strings and None"""
+    if value is None or value == "" or value == " ":
+        return default
+    try:
+        return int(float(value))
+    except (ValueError, TypeError):
+        return default
+
+
 def read_sheet(sheet_name):
     """Read data from a Google Sheet via Apps Script"""
     try:
@@ -36,7 +55,6 @@ def read_sheet(sheet_name):
         )
         print(f"Reading sheet '{sheet_name}' - Status: {response.status_code}")
 
-        # Parse the JSON response
         data = response.json()
 
         # Handle case where Apps Script returns a JSON string of a 2D array
@@ -90,7 +108,8 @@ def sync_inventory_to_sheet():
         rows = [["Product", "OpeningStock", "UnitPrice", "StockDate"]]
         today = datetime.now().strftime('%Y-%m-%d')
         for name, data in inventory_data.items():
-            rows.append([name, data["stock"], data["price"], today])
+            # Pad with empty strings to match the 10-column structure
+            rows.append([name, data["stock"], data["price"], today, "", "", "", "", "", ""])
 
         response = requests.post(
             GOOGLE_SCRIPT_URL,
@@ -128,14 +147,8 @@ def load_inventory_from_sheet():
     for row in data[1:]:
         if len(row) >= 3 and row[0]:
             product_name = str(row[0]).strip()
-            try:
-                stock = float(row[1]) if row[1] is not None else 0
-            except (ValueError, TypeError):
-                stock = 0
-            try:
-                price = float(row[2]) if row[2] is not None else 0
-            except (ValueError, TypeError):
-                price = 0
+            stock = safe_float(row[1])
+            price = safe_float(row[2])
 
             inventory_data[product_name] = {
                 "stock": stock,
@@ -163,17 +176,17 @@ def load_sales_from_sheet():
         if len(row) >= 8:
             try:
                 sales_data.append({
-                    'date': str(row[0]),
-                    'product': str(row[1]),
-                    'quantity': float(row[2]) if row[2] is not None else 0,
-                    'unitPrice': float(row[3]) if row[3] is not None else 0,
-                    'total': float(row[4]) if row[4] is not None else 0,
-                    'mpesa': float(row[5]) if row[5] is not None else 0,
-                    'cash': float(row[6]) if row[6] is not None else 0,
-                    'debt': float(row[7]) if row[7] is not None else 0,
+                    'date': str(row[0]) if row[0] else "",
+                    'product': str(row[1]) if row[1] else "",
+                    'quantity': safe_float(row[2]),
+                    'unitPrice': safe_float(row[3]),
+                    'total': safe_float(row[4]),
+                    'mpesa': safe_float(row[5]),
+                    'cash': safe_float(row[6]),
+                    'debt': safe_float(row[7]),
                     'type': 'Sale'
                 })
-            except (ValueError, TypeError) as e:
+            except Exception as e:
                 print(f"Error parsing sales row: {row}, error: {e}")
                 continue
 
@@ -194,15 +207,18 @@ def load_restocks_from_sheet():
     for row in data[1:]:
         if len(row) >= 5:
             try:
+                # Your sheet: Date, Product, Qty, UnitPrice, [empty], TotalCost
+                # So total is at index 5, not index 4
+                total_idx = 5 if len(row) > 5 and row[5] not in [None, ""] else 4
                 restocks_data.append({
-                    'date': str(row[0]),
-                    'product': str(row[1]),
-                    'quantity': float(row[2]) if row[2] is not None else 0,
-                    'unitPrice': float(row[3]) if row[3] is not None else 0,
-                    'total': float(row[4]) if row[4] is not None else 0,
+                    'date': str(row[0]) if row[0] else "",
+                    'product': str(row[1]) if row[1] else "",
+                    'quantity': safe_float(row[2]),
+                    'unitPrice': safe_float(row[3]),
+                    'total': safe_float(row[total_idx]),
                     'type': 'Restock'
                 })
-            except (ValueError, TypeError) as e:
+            except Exception as e:
                 print(f"Error parsing restock row: {row}, error: {e}")
                 continue
 
@@ -410,18 +426,18 @@ def record_sale():
                 'debt': debt
             })
 
-            # Write to Google Sheet
+            # Write to Google Sheet - match your column structure
             append_to_sheet(
                 "Sales",
                 [
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),  # ISO format like your existing data
                     item['name'],
                     item['quantity'],
                     item['price'],
                     item['price'] * item['quantity'],
-                    mpesa,
-                    cash,
-                    debt
+                    mpesa if mpesa > 0 else "",  # Empty string if 0 to match your sheet
+                    cash if cash > 0 else "",
+                    debt if debt > 0 else ""
                 ]
             )
         else:
@@ -462,7 +478,7 @@ def record_restock():
             'type': 'Restock'
         })
 
-        # Write to Google Sheet
+        # Write to Google Sheet - match your column structure: Date, Product, Qty, UnitPrice, [empty], TotalCost
         append_to_sheet(
             "Restocks",
             [
@@ -470,7 +486,8 @@ def record_restock():
                 product,
                 qty,
                 inventory_data[product]['price'],
-                inventory_data[product]['price'] * qty
+                "",  # Empty column 5
+                inventory_data[product]['price'] * qty  # TotalCost at column 6
             ]
         )
 
