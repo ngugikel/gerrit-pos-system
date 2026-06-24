@@ -15,7 +15,8 @@ ADMIN_USERNAME = 'admin'
 ADMIN_PASSWORD = 'padmin123'
 
 # Global data stores
-inventory_data = {}
+inventory_data = {}      # Current calculated stock
+opening_stock = {}       # Original stock from Inventory sheet
 sales_data = []
 restocks_data = []
 
@@ -62,18 +63,20 @@ def append_to_sheet(sheet_name, row):
         return False
 
 
-def load_inventory_from_sheet():
-    global inventory_data
+def load_opening_stock_from_sheet():
+    """Load opening stock from Inventory sheet (read-only reference)"""
+    global opening_stock
     data = read_sheet("Inventory")
     if not data or len(data) < 2:
         return False
-    inventory_data = {}
+    opening_stock = {}
     for row in data[1:]:
         if len(row) >= 3 and row[0]:
-            inventory_data[str(row[0]).strip()] = {
+            opening_stock[str(row[0]).strip()] = {
                 "stock": safe_float(row[1]),
                 "price": safe_float(row[2])
             }
+    print(f"Loaded {len(opening_stock)} products opening stock")
     return True
 
 
@@ -98,8 +101,9 @@ def load_sales_from_sheet():
                     'debt': safe_float(row[7]),
                     'type': 'Sale'
                 })
-            except Exception as e:
+            except:
                 continue
+    print(f"Loaded {len(sales_data)} sales records")
 
 
 def load_restocks_from_sheet():
@@ -121,14 +125,48 @@ def load_restocks_from_sheet():
                     'total': safe_float(row[total_idx]),
                     'type': 'Restock'
                 })
-            except Exception as e:
+            except:
                 continue
+    print(f"Loaded {len(restocks_data)} restock records")
+
+
+def calculate_current_stock():
+    """Calculate current stock: OpeningStock - TotalSales + TotalRestocks"""
+    global inventory_data
+    inventory_data = {}
+
+    for product, data in opening_stock.items():
+        inventory_data[product] = {
+            "stock": data["stock"],
+            "price": data["price"]
+        }
+
+    # Subtract all sales
+    for sale in sales_data:
+        product = sale['product']
+        if product in inventory_data:
+            inventory_data[product]['stock'] -= sale['quantity']
+
+    # Add all restocks
+    for restock in restocks_data:
+        product = restock['product']
+        if product in inventory_data:
+            inventory_data[product]['stock'] += restock['quantity']
+        else:
+            # Product exists in restocks but not in opening stock
+            inventory_data[product] = {
+                "stock": restock['quantity'],
+                "price": restock['unitPrice']
+            }
+
+    print(f"Calculated current stock for {len(inventory_data)} products")
 
 
 def load_data():
-    load_inventory_from_sheet()
+    load_opening_stock_from_sheet()
     load_sales_from_sheet()
     load_restocks_from_sheet()
+    calculate_current_stock()
 
 
 def token_required(f):
@@ -145,10 +183,7 @@ load_data()
 @app.route('/test-sheet')
 def test_sheet():
     try:
-        payload = {
-            "sheet": "Sales",
-            "row": [datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "TEST", 1, 100, 100, 100, 0, 0]
-        }
+        payload = {"sheet": "Sales", "row": [datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "TEST", 1, 100, 100, 100, 0, 0]}
         response = requests.post(GOOGLE_SCRIPT_URL, headers={"Content-Type": "application/json"}, data=json.dumps(payload), timeout=30)
         return jsonify({"status_code": response.status_code, "response": response.text})
     except Exception as e:
@@ -162,14 +197,13 @@ def debug_sheet():
     restocks = read_sheet("Restocks")
     return jsonify({
         "inventory_rows": len(inventory),
-        "inventory_sample": inventory[:3] if inventory else [],
+        "opening_stock_count": len(opening_stock),
         "sales_rows": len(sales),
-        "sales_sample": sales[:3] if sales else [],
+        "sales_in_memory": len(sales_data),
         "restocks_rows": len(restocks),
-        "restocks_sample": restocks[:3] if restocks else [],
-        "memory_inventory_count": len(inventory_data),
-        "memory_sales_count": len(sales_data),
-        "memory_restocks_count": len(restocks_data),
+        "restocks_in_memory": len(restocks_data),
+        "calculated_inventory": len(inventory_data),
+        "sample_stock": {k: v['stock'] for k, v in list(inventory_data.items())[:3]},
     })
 
 
@@ -207,7 +241,8 @@ def get_products():
 @app.route('/api/inventory')
 @token_required
 def get_inventory():
-    load_inventory_from_sheet()
+    # Recalculate from sheets to get latest
+    load_data()
     return jsonify(inventory_data)
 
 
@@ -234,25 +269,19 @@ def record_sale():
         qty = item['quantity']
 
         if product in inventory_data and inventory_data[product]['stock'] >= qty:
+            # Update memory
             inventory_data[product]['stock'] -= qty
 
+            # Add to sales log
             sales_data.append({
-                'date': sale_date,
-                'product': product,
-                'quantity': qty,
-                'unitPrice': item['price'],
-                'total': item['price'] * qty,
-                'type': 'Sale',
-                'mpesa': mpesa,
-                'cash': cash,
-                'debt': debt
+                'date': sale_date, 'product': product, 'quantity': qty,
+                'unitPrice': item['price'], 'total': item['price'] * qty,
+                'type': 'Sale', 'mpesa': mpesa, 'cash': cash, 'debt': debt
             })
 
+            # Write to Sales sheet
             append_to_sheet("Sales", [
-                sale_date,
-                item['name'],
-                item['quantity'],
-                item['price'],
+                sale_date, item['name'], item['quantity'], item['price'],
                 item['price'] * item['quantity'],
                 mpesa if mpesa > 0 else "",
                 cash if cash > 0 else "",
@@ -277,26 +306,28 @@ def record_restock():
     if not qty or qty < 1:
         return jsonify({'error': 'Invalid quantity'}), 400
 
+    # Update memory
     if product in inventory_data:
         inventory_data[product]['stock'] += qty
+    else:
+        # New product not in opening stock
+        inventory_data[product] = {"stock": qty, "price": 0}
 
-        restocks_data.append({
-            'date': date,
-            'product': product,
-            'quantity': qty,
-            'unitPrice': inventory_data[product]['price'],
-            'total': inventory_data[product]['price'] * qty,
-            'type': 'Restock'
-        })
+    # Add to restocks log
+    restocks_data.append({
+        'date': date, 'product': product, 'quantity': qty,
+        'unitPrice': inventory_data[product]['price'],
+        'total': inventory_data[product]['price'] * qty,
+        'type': 'Restock'
+    })
 
-        append_to_sheet("Restocks", [
-            date, product, qty, inventory_data[product]['price'],
-            "", inventory_data[product]['price'] * qty
-        ])
+    # Write to Restocks sheet
+    append_to_sheet("Restocks", [
+        date, product, qty, inventory_data[product]['price'],
+        "", inventory_data[product]['price'] * qty
+    ])
 
-        return jsonify({'success': True})
-
-    return jsonify({'error': 'Product not found'}), 404
+    return jsonify({'success': True})
 
 
 @app.route('/api/transactions')
@@ -327,21 +358,16 @@ def get_transactions():
 def get_stats():
     load_sales_from_sheet()
 
-    # Get optional date range filters from query params
     start_date = request.args.get('startDate', '')
     end_date = request.args.get('endDate', '')
 
     filtered_sales = sales_data
-
-    # Apply date filtering if provided
     if start_date or end_date:
         def parse_date_str(d):
-            # Handle various date formats: "2026-04-23", "2026-04-23T21:00:00.000Z", etc.
             try:
                 return d.split('T')[0] if 'T' in d else d
             except:
                 return str(d)
-
         if start_date:
             filtered_sales = [s for s in filtered_sales if start_date <= parse_date_str(s['date'])]
         if end_date:
@@ -350,36 +376,26 @@ def get_stats():
     total_sales = len(filtered_sales)
     total_revenue = sum(s['total'] for s in filtered_sales)
     total_items = sum(s['quantity'] for s in filtered_sales)
-
     total_mpesa = sum(s['mpesa'] for s in filtered_sales)
     total_cash = sum(s['cash'] for s in filtered_sales)
     total_debt = sum(s['debt'] for s in filtered_sales)
 
-    # Calculate today's stats (always from all data, not filtered)
     today = datetime.now().strftime('%Y-%m-%d')
     today_sales_data = [s for s in sales_data if today in str(s['date'])]
-
     today_revenue = sum(s['total'] for s in today_sales_data)
     today_mpesa = sum(s['mpesa'] for s in today_sales_data)
     today_cash = sum(s['cash'] for s in today_sales_data)
     today_debt = sum(s['debt'] for s in today_sales_data)
 
     return jsonify({
-        "totalSales": total_sales,
-        "totalRevenue": total_revenue,
-        "totalItems": total_items,
-        "todaySales": today_revenue,
+        "totalSales": total_sales, "totalRevenue": total_revenue,
+        "totalItems": total_items, "todaySales": today_revenue,
         "payments": {
-            "totalMpesa": total_mpesa,
-            "totalCash": total_cash,
-            "totalDebt": total_debt,
-            "todayMpesa": today_mpesa,
-            "todayCash": today_cash,
-            "todayDebt": today_debt
+            "totalMpesa": total_mpesa, "totalCash": total_cash, "totalDebt": total_debt,
+            "todayMpesa": today_mpesa, "todayCash": today_cash, "todayDebt": today_debt
         },
         "filterApplied": bool(start_date or end_date),
-        "startDate": start_date,
-        "endDate": end_date
+        "startDate": start_date, "endDate": end_date
     })
 
 
@@ -392,304 +408,69 @@ HTML_TEMPLATE = '''
     <title>Gerrit POS System</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-        }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
         .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-        .login-container {
-            background: white;
-            padding: 40px;
-            border-radius: 10px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-            max-width: 400px;
-            margin: 100px auto;
-        }
-        .main-container {
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-            overflow: hidden;
-        }
-        .header {
-            background: #333;
-            color: white;
-            padding: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .nav {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        .nav button {
-            background: #555;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-        .nav button:hover, .nav button.active {
-            background: #667eea;
-        }
+        .login-container { background: white; padding: 40px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); max-width: 400px; margin: 100px auto; }
+        .main-container { background: white; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); overflow: hidden; }
+        .header { background: #333; color: white; padding: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .nav { display: flex; gap: 10px; flex-wrap: wrap; }
+        .nav button { background: #555; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; transition: background 0.3s; }
+        .nav button:hover, .nav button.active { background: #667eea; }
         .content { padding: 20px; }
         .hidden { display: none !important; }
-        input, select {
-            width: 100%;
-            padding: 12px;
-            margin: 8px 0;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 16px;
-        }
-        button {
-            background: #667eea;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: background 0.3s;
-        }
+        input, select { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 5px; font-size: 16px; }
+        button { background: #667eea; color: white; border: none; padding: 12px 24px; border-radius: 5px; cursor: pointer; font-size: 16px; transition: background 0.3s; }
         button:hover { background: #5568d3; }
-        .btn-danger { background: #e74c3c; }
-        .btn-danger:hover { background: #c0392b; }
-        .btn-success { background: #27ae60; }
-        .btn-success:hover { background: #229954; }
-        .btn-secondary { background: #6c757d; }
-        .btn-secondary:hover { background: #545b62; }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }
+        .btn-danger { background: #e74c3c; } .btn-danger:hover { background: #c0392b; }
+        .btn-success { background: #27ae60; } .btn-success:hover { background: #229954; }
+        .btn-secondary { background: #6c757d; } .btn-secondary:hover { background: #545b62; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
         th { background: #f8f9fa; font-weight: 600; }
         tr:hover { background: #f8f9fa; }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        .stat-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 25px;
-            border-radius: 10px;
-            text-align: center;
-        }
-        .stat-value {
-            font-size: 36px;
-            font-weight: bold;
-            margin: 10px 0;
-        }
-        .cart-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px;
-            background: #f8f9fa;
-            margin: 5px 0;
-            border-radius: 5px;
-        }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .stat-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 25px; border-radius: 10px; text-align: center; }
+        .stat-value { font-size: 36px; font-weight: bold; margin: 10px 0; }
+        .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #f8f9fa; margin: 5px 0; border-radius: 5px; }
         .low-stock { color: #e74c3c; font-weight: bold; }
-        .message {
-            padding: 15px;
-            margin: 10px 0;
-            border-radius: 5px;
-            display: none;
-        }
+        .message { padding: 15px; margin: 10px 0; border-radius: 5px; display: none; }
         .message.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .message.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         .search-box { margin-bottom: 20px; }
-        .product-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 15px;
-            margin-top: 20px;
-        }
-        .product-card {
-            border: 1px solid #ddd;
-            padding: 15px;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        .product-card:hover {
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-            transform: translateY(-2px);
-        }
-        .quantity-control {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-top: 10px;
-        }
-        .quantity-control button {
-            width: 30px;
-            height: 30px;
-            padding: 0;
-            border-radius: 50%;
-        }
-        .cart-summary {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            margin-top: 20px;
-        }
-        .total {
-            font-size: 24px;
-            font-weight: bold;
-            color: #667eea;
-            margin-top: 10px;
-        }
+        .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; margin-top: 20px; }
+        .product-card { border: 1px solid #ddd; padding: 15px; border-radius: 8px; cursor: pointer; transition: all 0.3s; }
+        .product-card:hover { box-shadow: 0 5px 15px rgba(0,0,0,0.1); transform: translateY(-2px); }
+        .quantity-control { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+        .quantity-control button { width: 30px; height: 30px; padding: 0; border-radius: 50%; }
+        .cart-summary { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-top: 20px; }
+        .total { font-size: 24px; font-weight: bold; color: #667eea; margin-top: 10px; }
         .payment-match { color: #27ae60; font-weight: bold; }
         .payment-mismatch { color: #e74c3c; font-weight: bold; }
         .out-of-stock { opacity: 0.5; pointer-events: none; }
-        .pos-layout {
-            display: grid;
-            grid-template-columns: 2fr 380px;
-            gap: 20px;
-            align-items: start;
-        }
+        .pos-layout { display: grid; grid-template-columns: 2fr 380px; gap: 20px; align-items: start; }
         .products-panel { width: 100%; }
         .cart-panel { width: 380px; }
-
-        /* Sale date picker */
-        .sale-date-section {
-            background: #fff3e0;
-            border: 1px solid #ffe0b2;
-            border-radius: 8px;
-            padding: 12px 15px;
-            margin-bottom: 15px;
-        }
-        .sale-date-section label {
-            font-size: 13px;
-            color: #e65100;
-            font-weight: 600;
-            display: block;
-            margin-bottom: 6px;
-        }
-        .sale-date-section input {
-            margin: 0;
-            border-color: #ffcc80;
-        }
-        .sale-date-section small {
-            color: #f57c00;
-            font-size: 12px;
-            display: block;
-            margin-top: 4px;
-        }
-
-        /* Stats filter styles */
-        .stats-filter-section {
-            background: #e3f2fd;
-            border: 1px solid #bbdefb;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 25px;
-        }
-        .stats-filter-section h3 {
-            color: #1565c0;
-            margin-bottom: 15px;
-            font-size: 18px;
-        }
-        .filter-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr auto auto;
-            gap: 15px;
-            align-items: end;
-        }
-        .filter-group {
-            display: flex;
-            flex-direction: column;
-        }
-        .filter-group label {
-            font-size: 13px;
-            color: #555;
-            font-weight: 600;
-            margin-bottom: 5px;
-        }
-        .filter-group input {
-            margin: 0;
-        }
-        .filter-btn {
-            padding: 12px 20px;
-            height: fit-content;
-        }
-        .filter-active {
-            background: #1565c0 !important;
-        }
-        .filter-badge {
-            display: inline-block;
-            background: #1565c0;
-            color: white;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 12px;
-            margin-left: 10px;
-        }
-        .quick-filters {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 15px;
-            flex-wrap: wrap;
-        }
-        .quick-filters button {
-            padding: 8px 16px;
-            font-size: 14px;
-        }
-        .quick-filters button.active {
-            background: #1565c0;
-        }
-
-        /* Restock form */
-        .restock-form {
-            max-width: 500px;
-            background: #f8f9fa;
-            padding: 30px;
-            border-radius: 10px;
-        }
-        .restock-form label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 600;
-            color: #333;
-        }
-        .restock-form .form-group {
-            margin-bottom: 20px;
-        }
-        .restock-form select, .restock-form input {
-            margin: 0;
-        }
-        .restock-info {
-            background: #e3f2fd;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border-left: 4px solid #2196f3;
-        }
-        .restock-info h4 {
-            margin-bottom: 8px;
-            color: #1565c0;
-        }
-        .restock-info p {
-            color: #555;
-            font-size: 14px;
-            line-height: 1.5;
-        }
-
+        .sale-date-section { background: #fff3e0; border: 1px solid #ffe0b2; border-radius: 8px; padding: 12px 15px; margin-bottom: 15px; }
+        .sale-date-section label { font-size: 13px; color: #e65100; font-weight: 600; display: block; margin-bottom: 6px; }
+        .sale-date-section input { margin: 0; border-color: #ffcc80; }
+        .sale-date-section small { color: #f57c00; font-size: 12px; display: block; margin-top: 4px; }
+        .stats-filter-section { background: #e3f2fd; border: 1px solid #bbdefb; border-radius: 10px; padding: 20px; margin-bottom: 25px; }
+        .stats-filter-section h3 { color: #1565c0; margin-bottom: 15px; font-size: 18px; }
+        .filter-row { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 15px; align-items: end; }
+        .filter-group { display: flex; flex-direction: column; }
+        .filter-group label { font-size: 13px; color: #555; font-weight: 600; margin-bottom: 5px; }
+        .filter-group input { margin: 0; }
+        .filter-btn { padding: 12px 20px; height: fit-content; }
+        .quick-filters { display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap; }
+        .quick-filters button { padding: 8px 16px; font-size: 14px; }
+        .quick-filters button.active { background: #1565c0; }
+        .restock-form { max-width: 500px; background: #f8f9fa; padding: 30px; border-radius: 10px; }
+        .restock-form label { display: block; margin-bottom: 5px; font-weight: 600; color: #333; }
+        .restock-form .form-group { margin-bottom: 20px; }
+        .restock-form select, .restock-form input { margin: 0; }
+        .restock-info { background: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #2196f3; }
+        .restock-info h4 { margin-bottom: 8px; color: #1565c0; }
+        .restock-info p { color: #555; font-size: 14px; line-height: 1.5; }
         @media(max-width:900px) {
             .pos-layout { grid-template-columns: 1fr; }
             .cart-panel { width: 100%; }
@@ -738,13 +519,11 @@ HTML_TEMPLATE = '''
                                 <h3>Cart</h3>
                                 <div id="cartItems"></div>
                                 <div class="total">Total: KES <span id="cartTotal">0.00</span></div>
-
                                 <div class="sale-date-section">
                                     <label for="saleDate">📅 Sale Date</label>
                                     <input type="date" id="saleDate">
                                     <small>Leave as today, or select a past date to backdate this sale</small>
                                 </div>
-
                                 <div style="border-top: 2px solid #ddd; padding-top: 15px;">
                                     <h4>Payment Method</h4>
                                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px;">
@@ -776,9 +555,7 @@ HTML_TEMPLATE = '''
                 <div id="inventoryTab" class="tab-content hidden">
                     <h2>Inventory Management</h2>
                     <table id="inventoryTable">
-                        <thead>
-                            <tr><th>Product</th><th>Stock</th><th>Price (KES)</th><th>Status</th></tr>
-                        </thead>
+                        <thead><tr><th>Product</th><th>Stock</th><th>Price (KES)</th><th>Status</th></tr></thead>
                         <tbody></tbody>
                     </table>
                 </div>
@@ -806,9 +583,7 @@ HTML_TEMPLATE = '''
                         </div>
                         <div class="form-group">
                             <label>Current Stock</label>
-                            <div id="currentStockDisplay" style="padding: 12px; background: white; border-radius: 5px; border: 1px solid #ddd; color: #667eea; font-weight: bold;">
-                                Select a product to see current stock
-                            </div>
+                            <div id="currentStockDisplay" style="padding: 12px; background: white; border-radius: 5px; border: 1px solid #ddd; color: #667eea; font-weight: bold;">Select a product to see current stock</div>
                         </div>
                         <button onclick="restock()" class="btn-success" style="width: 100%;">➕ Add Stock</button>
                     </div>
@@ -818,20 +593,16 @@ HTML_TEMPLATE = '''
                 <div id="transactionsTab" class="tab-content hidden">
                     <h2>Transaction History</h2>
                     <table id="transactionsTable">
-                        <thead>
-                            <tr><th>Date</th><th>Type</th><th>Product</th><th>Qty</th><th>Total (KES)</th><th>M-Pesa</th><th>Cash</th><th>Debt</th></tr>
-                        </thead>
+                        <thead><tr><th>Date</th><th>Type</th><th>Product</th><th>Qty</th><th>Total (KES)</th><th>M-Pesa</th><th>Cash</th><th>Debt</th></tr></thead>
                         <tbody></tbody>
                     </table>
                 </div>
 
-                <!-- STATS TAB WITH DATE FILTER -->
+                <!-- STATS TAB -->
                 <div id="statsTab" class="tab-content hidden">
                     <h2>Sales Statistics</h2>
-
                     <div class="stats-filter-section">
                         <h3>📊 Filter by Date Range</h3>
-
                         <div class="quick-filters">
                             <button onclick="setQuickFilter('today')" id="qf-today">Today</button>
                             <button onclick="setQuickFilter('yesterday')" id="qf-yesterday">Yesterday</button>
@@ -839,7 +610,6 @@ HTML_TEMPLATE = '''
                             <button onclick="setQuickFilter('thisMonth')" id="qf-thisMonth">This Month</button>
                             <button onclick="setQuickFilter('all')" id="qf-all" class="active">All Time</button>
                         </div>
-
                         <div class="filter-row">
                             <div class="filter-group">
                                 <label for="statsStartDate">From Date</label>
@@ -852,13 +622,10 @@ HTML_TEMPLATE = '''
                             <button onclick="applyStatsFilter()" class="btn-success filter-btn">Apply Filter</button>
                             <button onclick="clearStatsFilter()" class="btn-secondary filter-btn">Clear</button>
                         </div>
-
                         <div id="filterStatus" style="margin-top: 10px; font-size: 14px; color: #1565c0;"></div>
                     </div>
-
                     <div class="stats-grid" id="statsGrid"></div>
                 </div>
-                <!-- END STATS TAB -->
 
             </div>
         </div>
@@ -881,56 +648,30 @@ HTML_TEMPLATE = '''
             } catch (error) { showLogin(); }
         }
 
-        function showLogin() {
-            document.getElementById('loginSection').classList.remove('hidden');
-            document.getElementById('appSection').classList.add('hidden');
-        }
-
-        function showApp() {
-            document.getElementById('loginSection').classList.add('hidden');
-            document.getElementById('appSection').classList.remove('hidden');
-            loadProducts();
-            loadInventory();
-        }
+        function showLogin() { document.getElementById('loginSection').classList.remove('hidden'); document.getElementById('appSection').classList.add('hidden'); }
+        function showApp() { document.getElementById('loginSection').classList.add('hidden'); document.getElementById('appSection').classList.remove('hidden'); loadProducts(); loadInventory(); }
 
         async function login() {
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             try {
-                const response = await fetch('/api/login', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
-                });
+                const response = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
                 const data = await response.json();
-                if (data.success) {
-                    authToken = data.token;
-                    localStorage.setItem('pos_token', authToken);
-                    showMessage('loginMessage', 'Login successful!', 'success');
-                    showApp();
-                } else { showMessage('loginMessage', data.message, 'error'); }
+                if (data.success) { authToken = data.token; localStorage.setItem('pos_token', authToken); showMessage('loginMessage', 'Login successful!', 'success'); showApp(); }
+                else { showMessage('loginMessage', data.message, 'error'); }
             } catch (error) { showMessage('loginMessage', 'Login failed', 'error'); }
         }
 
-        function logout() {
-            fetch('/api/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + authToken } });
-            localStorage.removeItem('pos_token'); authToken = null; showLogin();
-        }
+        function logout() { fetch('/api/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + authToken } }); localStorage.removeItem('pos_token'); authToken = null; showLogin(); }
 
         async function loadProducts() {
-            try {
-                const response = await fetch('/api/products');
-                products = await response.json();
-                renderProductGrid();
-                populateRestockSelect();
-            } catch (error) { console.error('Failed to load products'); }
+            try { const response = await fetch('/api/products'); products = await response.json(); renderProductGrid(); populateRestockSelect(); }
+            catch (error) { console.error('Failed to load products'); }
         }
 
         async function loadInventory() {
-            try {
-                const response = await fetch('/api/inventory', { headers: { 'Authorization': 'Bearer ' + authToken } });
-                inventory = await response.json();
-                renderInventoryTable();
-            } catch (error) { console.error('Failed to load inventory'); }
+            try { const response = await fetch('/api/inventory', { headers: { 'Authorization': 'Bearer ' + authToken } }); inventory = await response.json(); renderInventoryTable(); }
+            catch (error) { console.error('Failed to load inventory'); }
         }
 
         function renderProductGrid() {
@@ -947,17 +688,14 @@ HTML_TEMPLATE = '''
                         <button onclick="updateCart('${product.name.replace(/'/g, "\\'")}', -1)" ${product.stock <= 0 ? 'disabled' : ''}>-</button>
                         <span id="qty-${encodeURIComponent(product.name)}">0</span>
                         <button onclick="updateCart('${product.name.replace(/'/g, "\\'")}', 1)" ${product.stock <= 0 ? 'disabled' : ''}>+</button>
-                    </div>
-                `;
+                    </div>`;
                 grid.appendChild(card);
             });
         }
 
         function filterProducts() {
             const search = document.getElementById('productSearch').value.toLowerCase();
-            document.querySelectorAll('.product-card').forEach(card => {
-                card.style.display = card.querySelector('h4').textContent.toLowerCase().includes(search) ? 'block' : 'none';
-            });
+            document.querySelectorAll('.product-card').forEach(card => { card.style.display = card.querySelector('h4').textContent.toLowerCase().includes(search) ? 'block' : 'none'; });
         }
 
         function getQtyElementId(productName) { return 'qty-' + encodeURIComponent(productName); }
@@ -1018,14 +756,10 @@ HTML_TEMPLATE = '''
             const saleDate = document.getElementById('saleDate').value || new Date().toISOString().split('T')[0];
             const totalAmount = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
             const totalPaid = mpesa + cash + debt;
-            if (Math.abs(totalPaid - totalAmount) > 0.01) {
-                showMessage('message', `Payment total (KES ${totalPaid.toFixed(2)}) does not match sale total (KES ${totalAmount.toFixed(2)})`, 'error');
-                return;
-            }
+            if (Math.abs(totalPaid - totalAmount) > 0.01) { showMessage('message', `Payment total (KES ${totalPaid.toFixed(2)}) does not match sale total (KES ${totalAmount.toFixed(2)})`, 'error'); return; }
             try {
                 const response = await fetch('/api/sale', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
                     body: JSON.stringify({ items, payments: { mpesa, cash, debt }, date: saleDate })
                 });
                 if (response.ok) {
@@ -1086,16 +820,15 @@ HTML_TEMPLATE = '''
             if (!quantity || quantity < 1) { showMessage('message', 'Please enter a valid quantity (minimum 1)', 'error'); return; }
             try {
                 const response = await fetch('/api/restock', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
                     body: JSON.stringify({ product, quantity, date })
                 });
                 if (response.ok) {
                     showMessage('message', `Successfully added ${quantity} units to ${product}!`, 'success');
                     document.getElementById('restockQty').value = '';
                     document.getElementById('restockProduct').value = '';
+                    await loadProducts(); await loadInventory();
                     updateRestockStockDisplay();
-                    await loadInventory(); await loadProducts();
                 } else { const data = await response.json(); showMessage('message', data.error || 'Restock failed', 'error'); }
             } catch (error) { showMessage('message', 'Restock failed: ' + error.message, 'error'); }
         }
@@ -1112,33 +845,16 @@ HTML_TEMPLATE = '''
             });
         }
 
-        // ==================== STATS DATE FILTER FUNCTIONS ====================
-
         function getTodayStr() { return new Date().toISOString().split('T')[0]; }
-
-        function getYesterdayStr() {
-            const d = new Date(); d.setDate(d.getDate() - 1);
-            return d.toISOString().split('T')[0];
-        }
-
-        function getWeekStartStr() {
-            const d = new Date(); d.setDate(d.getDate() - d.getDay());
-            return d.toISOString().split('T')[0];
-        }
-
-        function getMonthStartStr() {
-            const d = new Date(); d.setDate(1);
-            return d.toISOString().split('T')[0];
-        }
+        function getYesterdayStr() { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0]; }
+        function getWeekStartStr() { const d = new Date(); d.setDate(d.getDate() - d.getDay()); return d.toISOString().split('T')[0]; }
+        function getMonthStartStr() { const d = new Date(); d.setDate(1); return d.toISOString().split('T')[0]; }
 
         function setQuickFilter(period) {
-            // Remove active class from all
             document.querySelectorAll('.quick-filters button').forEach(btn => btn.classList.remove('active'));
             document.getElementById('qf-' + period).classList.add('active');
-
             const today = getTodayStr();
             let start = '', end = today;
-
             switch(period) {
                 case 'today': start = today; end = today; break;
                 case 'yesterday': start = getYesterdayStr(); end = getYesterdayStr(); break;
@@ -1146,10 +862,8 @@ HTML_TEMPLATE = '''
                 case 'thisMonth': start = getMonthStartStr(); end = today; break;
                 case 'all': start = ''; end = ''; break;
             }
-
             document.getElementById('statsStartDate').value = start;
             document.getElementById('statsEndDate').value = end;
-
             currentStatsFilter = { startDate: start, endDate: end };
             loadStats();
         }
@@ -1158,10 +872,7 @@ HTML_TEMPLATE = '''
             const start = document.getElementById('statsStartDate').value;
             const end = document.getElementById('statsEndDate').value;
             currentStatsFilter = { startDate: start, endDate: end };
-
-            // Remove active from quick filters since custom range is set
             document.querySelectorAll('.quick-filters button').forEach(btn => btn.classList.remove('active'));
-
             loadStats();
         }
 
@@ -1183,63 +894,24 @@ HTML_TEMPLATE = '''
                     if (currentStatsFilter.endDate) params.append('endDate', currentStatsFilter.endDate);
                     url += '?' + params.toString();
                 }
-
                 const response = await fetch(url, { headers: { 'Authorization': 'Bearer ' + authToken } });
                 const stats = await response.json();
-
-                // Update filter status text
                 const statusEl = document.getElementById('filterStatus');
-                if (stats.filterApplied) {
-                    const start = stats.startDate || 'beginning';
-                    const end = stats.endDate || 'today';
-                    statusEl.innerHTML = `Showing data from <strong>${start}</strong> to <strong>${end}</strong>`;
-                } else {
-                    statusEl.textContent = 'Showing all-time data';
-                }
-
+                if (stats.filterApplied) { statusEl.innerHTML = `Showing data from <strong>${stats.startDate || 'beginning'}</strong> to <strong>${stats.endDate || 'today'}</strong>`; }
+                else { statusEl.textContent = 'Showing all-time data'; }
                 const grid = document.getElementById('statsGrid');
                 const p = stats.payments || {};
                 grid.innerHTML = `
-                    <div class="stat-card">
-                        <div>Total Sales</div>
-                        <div class="stat-value">${stats.totalSales}</div>
-                    </div>
-                    <div class="stat-card">
-                        <div>Total Revenue</div>
-                        <div class="stat-value">KES ${stats.totalRevenue.toFixed(2)}</div>
-                    </div>
-                    <div class="stat-card">
-                        <div>Items Sold</div>
-                        <div class="stat-value">${stats.totalItems}</div>
-                    </div>
-                    <div class="stat-card">
-                        <div>Today's Sales</div>
-                        <div class="stat-value">KES ${stats.todaySales.toFixed(2)}</div>
-                    </div>
-                    <div class="stat-card" style="background: linear-gradient(135deg, #1e88e5 0%, #0d47a1 100%);">
-                        <div>Total M-Pesa</div>
-                        <div class="stat-value">KES ${(p.totalMpesa || 0).toFixed(2)}</div>
-                    </div>
-                    <div class="stat-card" style="background: linear-gradient(135deg, #43a047 0%, #1b5e20 100%);">
-                        <div>Total Cash</div>
-                        <div class="stat-value">KES ${(p.totalCash || 0).toFixed(2)}</div>
-                    </div>
-                    <div class="stat-card" style="background: linear-gradient(135deg, #e53935 0%, #b71c1c 100%);">
-                        <div>Total Debt</div>
-                        <div class="stat-value">KES ${(p.totalDebt || 0).toFixed(2)}</div>
-                    </div>
-                    <div class="stat-card" style="background: linear-gradient(135deg, #fb8c00 0%, #e65100 100%);">
-                        <div>Today's M-Pesa</div>
-                        <div class="stat-value">KES ${(p.todayMpesa || 0).toFixed(2)}</div>
-                    </div>
-                    <div class="stat-card" style="background: linear-gradient(135deg, #8e24aa 0%, #4a148c 100%);">
-                        <div>Today's Cash</div>
-                        <div class="stat-value">KES ${(p.todayCash || 0).toFixed(2)}</div>
-                    </div>
-                    <div class="stat-card" style="background: linear-gradient(135deg, #f4511e 0%, #bf360c 100%);">
-                        <div>Today's Debt</div>
-                        <div class="stat-value">KES ${(p.todayDebt || 0).toFixed(2)}</div>
-                    </div>
+                    <div class="stat-card"><div>Total Sales</div><div class="stat-value">${stats.totalSales}</div></div>
+                    <div class="stat-card"><div>Total Revenue</div><div class="stat-value">KES ${stats.totalRevenue.toFixed(2)}</div></div>
+                    <div class="stat-card"><div>Items Sold</div><div class="stat-value">${stats.totalItems}</div></div>
+                    <div class="stat-card"><div>Today's Sales</div><div class="stat-value">KES ${stats.todaySales.toFixed(2)}</div></div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #1e88e5 0%, #0d47a1 100%);"><div>Total M-Pesa</div><div class="stat-value">KES ${(p.totalMpesa || 0).toFixed(2)}</div></div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #43a047 0%, #1b5e20 100%);"><div>Total Cash</div><div class="stat-value">KES ${(p.totalCash || 0).toFixed(2)}</div></div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #e53935 0%, #b71c1c 100%);"><div>Total Debt</div><div class="stat-value">KES ${(p.totalDebt || 0).toFixed(2)}</div></div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #fb8c00 0%, #e65100 100%);"><div>Today's M-Pesa</div><div class="stat-value">KES ${(p.todayMpesa || 0).toFixed(2)}</div></div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #8e24aa 0%, #4a148c 100%);"><div>Today's Cash</div><div class="stat-value">KES ${(p.todayCash || 0).toFixed(2)}</div></div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #f4511e 0%, #bf360c 100%);"><div>Today's Debt</div><div class="stat-value">KES ${(p.todayDebt || 0).toFixed(2)}</div></div>
                 `;
             } catch (error) { console.error('Failed to load stats'); }
         }
